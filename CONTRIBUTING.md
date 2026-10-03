@@ -14,7 +14,7 @@ CI runs the same typecheck on every PR.
 ## Relationship to the firmware
 
 The app talks to the device over a BLE protocol defined in
-[corisco-wallet](https://github.com/corisco-wallet/corisco-wallet)
+[corisco-firmware](https://github.com/corisco-wallet/corisco-firmware)
 (`corisco-protocol`). `src/postcard.ts` and `src/ble-uuids.ts` are
 hand-written mirrors of it; postcard encodes enum variants by declaration
 order, so a mismatch fails silently on the wire.
@@ -22,7 +22,7 @@ order, so a mismatch fails silently on the wire.
 The app pins the firmware release it targets in `package.json`:
 
 ```json
-"corisco": { "firmware": { "repo": "corisco-wallet/corisco-wallet", "tag": "v0.1.0", "protocol": 1 } }
+"corisco": { "firmware": { "repo": "corisco-wallet/corisco-firmware", "tag": "v0.1.0", "protocol": 1 } }
 ```
 
 Every firmware release publishes `vectors.json`: the exact bytes for every
@@ -41,7 +41,7 @@ New protocol variants are **appended** in the firmware; append them in the
 same relative position in `postcard.ts`.
 
 CI needs the repo secret `RELEASE_PLZ_TOKEN`: a fine-grained PAT with
-Contents: read on `corisco-wallet/corisco-wallet`.
+Contents: read on `corisco-wallet/corisco-firmware`.
 
 ## Releases
 

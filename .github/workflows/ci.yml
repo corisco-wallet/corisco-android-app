@@ -32,6 +32,6 @@ jobs:
         run: npm run fetch-vectors
         env:
           # The firmware repo is private; needs a fine-grained token with
-          # Contents: read on corisco-wallet/corisco-wallet (reuses the org PAT).
+          # Contents: read on corisco-wallet/corisco-firmware (reuses the org PAT).
           GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
       - run: npm test

@@ -36,7 +36,7 @@
   "private": true,
   "corisco": {
     "firmware": {
-      "repo": "corisco-wallet/corisco-wallet",
+      "repo": "corisco-wallet/corisco-firmware",
       "tag": "v0.1.0",
       "protocol": 1
     }

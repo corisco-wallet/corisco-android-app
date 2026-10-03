@@ -7,7 +7,7 @@ Android app locally; it assumes a real ESP32 signer for anything past the
 pairing screen, but the app builds and launches fine without one.
 
 The firmware, its BLE wire protocol and the hardware docs live in
-[corisco-wallet](https://github.com/corisco-wallet/corisco-wallet). This app
+[corisco-firmware](https://github.com/corisco-wallet/corisco-firmware). This app
 must speak the protocol of the firmware release it targets -- see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
