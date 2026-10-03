@@ -1,0 +1,23 @@
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # Opens/updates the release PR (version bump in package.json + app.json,
+  # CHANGELOG.md) from conventional commits; merging it tags vX.Y.Z and
+  # creates the GitHub Release.
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          # A PAT (not GITHUB_TOKEN) so the release PR and tag trigger CI.
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

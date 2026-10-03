@@ -43,7 +43,17 @@ same relative position in `postcard.ts`.
 CI needs the repo secret `RELEASE_PLZ_TOKEN`: a fine-grained PAT with
 Contents: read on `corisco-wallet/corisco-wallet`.
 
+## Releases
+
+Automated by [release-please](https://github.com/googleapis/release-please)
+(release-plz only supports Rust). On every push to `main` it opens/updates a
+release PR that bumps `version` in `package.json` and `app.json` and updates
+`CHANGELOG.md`, from the commit messages below. Merging it tags `vX.Y.Z` and
+creates the GitHub Release. Uses the `RELEASE_PLZ_TOKEN` secret so the PR
+and tag trigger CI. The first release is forced to `0.1.0`
+(`release-as` in `release-please-config.json`); remove that line afterwards.
+
 ## Commit messages
 
 [Conventional Commits](https://www.conventionalcommits.org/): `feat:`,
-`fix:`, `docs:`, `ci:`, `chore:`, ... No `Co-Authored-By` trailers.
+`fix:`, `docs:`, `ci:`, `chore:`, ... (`feat` bumps minor, `fix` patch). No `Co-Authored-By` trailers.
