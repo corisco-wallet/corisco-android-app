@@ -50,7 +50,21 @@ Automated by [release-please](https://github.com/googleapis/release-please)
 release PR that bumps `version` in `package.json` and `app.json` and updates
 `CHANGELOG.md`, from the commit messages below. Merging it tags `vX.Y.Z` and
 creates the GitHub Release. Uses the `RELEASE_PLZ_TOKEN` secret so the PR
-and tag trigger CI. The first release is forced to `0.1.0`
+and tag trigger CI. After the tag is created, a second job builds a release
+APK (`expo prebuild` + Gradle on the runner), signs it with the release
+keystore and attaches `corisco-android-app-vX.Y.Z.apk` to the GitHub
+Release. It needs these repo secrets: `ANDROID_KEYSTORE_BASE64` (the
+keystore, base64), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and
+`ANDROID_KEY_PASSWORD`. To create the keystore:
+
+```bash
+keytool -genkeypair -v -keystore release.keystore -alias corisco \
+  -keyalg RSA -keysize 2048 -validity 10000
+base64 -w0 release.keystore   # -> ANDROID_KEYSTORE_BASE64
+```
+
+Keep the keystore and passwords backed up: losing them means installed apps
+can't be updated by a build signed with a new key. The first release is forced to `0.1.0`
 (`release-as` in `release-please-config.json`); remove that line afterwards.
 
 ## Commit messages
