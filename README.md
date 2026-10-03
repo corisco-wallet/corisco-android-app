@@ -6,6 +6,11 @@ hardware signer over BLE and never holds private key material itself (see
 Android app locally; it assumes a real ESP32 signer for anything past the
 pairing screen, but the app builds and launches fine without one.
 
+The firmware, its BLE wire protocol and the hardware docs live in
+[corisco-wallet](https://github.com/corisco-wallet/corisco-wallet). This app
+must speak the protocol of the firmware release it targets -- see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 > Expo versions change fast. If something here doesn't match what you see,
 > check the exact-versioned docs at https://docs.expo.dev/versions/v57.0.0/
 > before assuming this file is wrong (see `AGENTS.md`).
@@ -49,7 +54,6 @@ sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 ## Install dependencies
 
 ```bash
-cd corisco-android-app
 npm install
 ```
 
