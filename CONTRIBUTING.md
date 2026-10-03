@@ -64,8 +64,7 @@ base64 -w0 release.keystore   # -> ANDROID_KEYSTORE_BASE64
 ```
 
 Keep the keystore and passwords backed up: losing them means installed apps
-can't be updated by a build signed with a new key. The first release is forced to `0.1.0`
-(`release-as` in `release-please-config.json`); remove that line afterwards.
+can't be updated by a build signed with a new key.
 
 ## Commit messages
 

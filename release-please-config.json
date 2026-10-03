@@ -5,10 +5,14 @@
       "release-type": "node",
       "package-name": "corisco-android-app",
       "include-v-prefix": true,
-      "release-as": "0.1.0",
       "extra-files": [
-        { "type": "json", "path": "app.json", "jsonpath": "$.expo.version" }
-      ]
+        {
+          "type": "json",
+          "path": "app.json",
+          "jsonpath": "$.expo.version"
+        }
+      ],
+      "include-component-in-tag": false
     }
   }
 }
