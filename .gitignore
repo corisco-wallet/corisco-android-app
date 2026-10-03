@@ -42,3 +42,6 @@ yarn-error.*
 
 # Claude Code local config (settings.json stays tracked)
 /.claude/rules/
+
+# Firmware vectors fetched for the contract tests
+/.contract/

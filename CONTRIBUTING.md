@@ -15,12 +15,33 @@ CI runs the same typecheck on every PR.
 
 The app talks to the device over a BLE protocol defined in
 [corisco-wallet](https://github.com/corisco-wallet/corisco-wallet)
-(`corisco-protocol`). `src/postcard.ts` and the UUIDs in
-`src/ble-transport.ts` are hand-written mirrors of it; postcard encodes enum
-variants by declaration order, so a mismatch fails silently on the wire.
+(`corisco-protocol`). `src/postcard.ts` and `src/ble-uuids.ts` are
+hand-written mirrors of it; postcard encodes enum variants by declaration
+order, so a mismatch fails silently on the wire.
 
-New protocol variants are **appended** in the firmware, and must be appended
-in the same relative position in `postcard.ts`.
+The app pins the firmware release it targets in `package.json`:
+
+```json
+"corisco": { "firmware": { "repo": "corisco-wallet/corisco-wallet", "tag": "v0.1.0", "protocol": 1 } }
+```
+
+Every firmware release publishes `vectors.json`: the exact bytes for every
+`Request`/`Response` variant, generated from the real Rust types. The
+contract tests (`tests/contract.test.ts`) check `postcard.ts` and the UUIDs
+against the pinned release's vectors, and CI runs them on every PR.
+
+```bash
+npm run fetch-vectors   # needs `gh auth login` (the firmware repo is private)
+npm test
+```
+
+To adopt a newer firmware: bump `tag` (and `protocol`, if the release changed
+it) in `package.json`, fetch, and fix `postcard.ts` until the tests pass.
+New protocol variants are **appended** in the firmware; append them in the
+same relative position in `postcard.ts`.
+
+CI needs the repo secret `RELEASE_PLZ_TOKEN`: a fine-grained PAT with
+Contents: read on `corisco-wallet/corisco-wallet`.
 
 ## Commit messages
 

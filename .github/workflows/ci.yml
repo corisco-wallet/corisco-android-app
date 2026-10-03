@@ -16,3 +16,22 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx tsc --noEmit
+
+  # The app must speak the protocol of the firmware release it pins
+  # (package.json -> "corisco.firmware"). See CONTRIBUTING.md.
+  firmware-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: fetch the pinned firmware's protocol vectors
+        run: npm run fetch-vectors
+        env:
+          # The firmware repo is private; needs a fine-grained token with
+          # Contents: read on corisco-wallet/corisco-wallet (reuses the org PAT).
+          GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+      - run: npm test
