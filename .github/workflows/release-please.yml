@@ -40,6 +40,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      # Inlined into the JS bundle. Regtest unless the repo variable
+      # SPARK_NETWORK (Settings > Variables) is set to MAINNET.
+      EXPO_PUBLIC_SPARK_NETWORK: ${{ vars.SPARK_NETWORK || 'REGTEST' }}
     steps:
       - uses: actions/checkout@v4
         with:

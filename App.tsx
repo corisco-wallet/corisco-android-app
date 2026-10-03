@@ -30,6 +30,7 @@ import { SyncingScreen } from "./src/screens/SyncingScreen";
 import { TransactionDetailScreen } from "./src/screens/TransactionDetailScreen";
 import { fetchBtcPrice } from "./src/price";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from "./src/settings-store";
+import { SPARK_NETWORK } from "./src/network";
 
 type Screen = "home" | "receive" | "send" | "settings" | "transaction";
 
@@ -274,7 +275,7 @@ export default function App() {
       const signer = new BleHardwareSigner(conn);
       const { wallet: w } = await SparkWallet.initialize({
         signer,
-        options: { network: "REGTEST", signerWithPreExistingKeys: true },
+        options: { network: SPARK_NETWORK, signerWithPreExistingKeys: true },
       });
       setWallet(w);
       signerRef.current = signer;

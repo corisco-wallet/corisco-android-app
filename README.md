@@ -51,6 +51,15 @@ yes | sdkmanager --licenses
 sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 ```
 
+## Network
+
+The wallet runs on **regtest** by default, so a local build never touches
+real funds. To use mainnet, set `EXPO_PUBLIC_SPARK_NETWORK=MAINNET` (in a
+gitignored `.env`, see `.env.example`, or in the shell) before starting or
+building; Expo inlines it into the bundle at build time. Any other value is
+an error. Release APKs follow the repo variable `SPARK_NETWORK`
+(`MAINNET` or `REGTEST`; regtest if unset).
+
 ## Install dependencies
 
 ```bash
