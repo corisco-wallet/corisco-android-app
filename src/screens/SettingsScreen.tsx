@@ -96,13 +96,13 @@ export function SettingsScreen({
       <TouchableOpacity
         style={styles.disconnectButton}
         onPress={() =>
-          Alert.alert("Disconnect signer?", "You can reconnect to it anytime from the signer list.", [
+          Alert.alert("Disconnect wallet?", "You can reconnect to it anytime from the signer list.", [
             { text: "Cancel", style: "cancel" },
             { text: "Disconnect", style: "destructive", onPress: onDisconnect },
           ])
         }
       >
-        <Text style={styles.disconnectButtonText}>Disconnect signer</Text>
+        <Text style={styles.disconnectButtonText}>Disconnect wallet</Text>
       </TouchableOpacity>
     </ScrollView>
   );

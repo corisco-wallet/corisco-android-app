@@ -1,7 +1,7 @@
 // Balance front and center, with Receive/Send actions below. No private
 // key material ever touches this screen (or this app).
 
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { WalletTransfer } from "@buildonspark/spark-sdk/types";
 import { colors, radii, spacing } from "../theme";
 import { ActivityList } from "../components/ActivityList";
@@ -61,7 +61,7 @@ export function HomeScreen({
     >
       <View style={styles.header}>
         <View style={styles.headerSideSpacer} />
-        <Text style={styles.brandText}>Corisco</Text>
+        <Image source={require("../../assets/android-icon-foreground.png")} style={styles.logo} accessibilityLabel="Corisco" />
         <TouchableOpacity onPress={onSettings} style={styles.settingsButton} hitSlop={8}>
           <Text style={styles.settingsIcon}>⚙</Text>
         </TouchableOpacity>
@@ -147,12 +147,9 @@ const styles = StyleSheet.create({
   headerSideSpacer: {
     width: 28,
   },
-  brandText: {
-    color: colors.textSecondary,
-    fontSize: 15,
-    fontWeight: "600",
-    letterSpacing: 3,
-    textTransform: "uppercase",
+  logo: {
+    width: 48,
+    height: 48,
   },
   settingsButton: {
     width: 28,

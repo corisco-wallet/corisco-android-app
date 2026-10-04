@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(74, 222, 128, 0.15)",
   },
   iconWrapOut: {
-    backgroundColor: "rgba(245, 185, 66, 0.15)",
+    backgroundColor: "rgba(255, 90, 31, 0.15)",
   },
   icon: {
     fontSize: 16,

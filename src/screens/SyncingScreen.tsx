@@ -12,7 +12,7 @@
 // list are actually in hand, right before Home renders them.
 
 import { useEffect, useRef } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { colors, spacing } from "../theme";
 
@@ -42,7 +42,6 @@ export function SyncingScreen({ progress, label }: { progress: number; label: st
 
   return (
     <View style={styles.container}>
-      <Text style={styles.brandText}>Corisco</Text>
       <View style={styles.ring}>
         <Svg width={SIZE} height={SIZE} style={StyleSheet.absoluteFill}>
           <Circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} stroke={colors.border} strokeWidth={STROKE_WIDTH} fill="none" />
@@ -74,11 +73,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: spacing.lg,
   },
-  brandText: {
-    color: colors.accent,
-    fontSize: 22,
-    fontWeight: "700",
-    letterSpacing: 1,
+  logo: {
+    width: 120,
+    height: 120,
     marginBottom: spacing.xl,
   },
   ring: {

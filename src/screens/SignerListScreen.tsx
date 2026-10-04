@@ -4,7 +4,7 @@
 // device's bond goes stale (re-flashed, factory-reset) and it would
 // otherwise sit in the list as a dead entry.
 
-import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { colors, radii, spacing } from "../theme";
 import type { SavedDevice } from "../device-store";
 
@@ -33,8 +33,8 @@ export function SignerListScreen({
 }) {
   return (
     <View style={styles.container}>
-      <Text style={styles.brandText}>Corisco</Text>
-      <Text style={styles.instructionText}>Choose a signer to connect to.</Text>
+      <Image source={require("../../assets/android-icon-foreground.png")} style={styles.logo} accessibilityLabel="Corisco" />
+      <Text style={styles.instructionText}>Choose a wallet to connect to.</Text>
       {initError && <Text style={styles.errorBody}>{initError}</Text>}
 
       <FlatList
@@ -79,12 +79,10 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingTop: 72,
   },
-  brandText: {
-    color: colors.accent,
-    fontSize: 22,
-    fontWeight: "700",
-    letterSpacing: 1,
-    textAlign: "center",
+  logo: {
+    width: 120,
+    height: 120,
+    alignSelf: "center",
     marginBottom: spacing.sm,
   },
   instructionText: {

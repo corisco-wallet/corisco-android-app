@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SparkWallet, SparkWalletEvent, type SparkWallet as SparkWalletType } from "@buildonspark/spark-sdk";
 import type { WalletTransfer } from "@buildonspark/spark-sdk/types";
 import { BleHardwareSigner } from "./src/ble-hardware-signer";
@@ -496,14 +496,14 @@ export default function App() {
     }
     return (
       <View style={styles.centered}>
-        <Text style={styles.brandText}>Corisco</Text>
+        <Image source={require("./assets/android-icon-foreground.png")} style={styles.logo} accessibilityLabel="Corisco" />
         {initError ? (
           <Text style={styles.errorBody}>{initError}</Text>
         ) : (
-          <Text style={styles.instructionText}>Connect to your Spark Signer device to get started.</Text>
+          <Text style={styles.instructionText}>Connect to your device to get started.</Text>
         )}
         <TouchableOpacity style={styles.connectButton} onPress={() => void startPairScan()}>
-          <Text style={styles.connectButtonText}>{initError ? "Try again" : "Connect to Signer"}</Text>
+          <Text style={styles.connectButtonText}>{initError ? "Try again" : "Connect Wallet"}</Text>
         </TouchableOpacity>
         <StatusBar style="light" />
       </View>
@@ -608,11 +608,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: "center",
   },
-  brandText: {
-    color: colors.accent,
-    fontSize: 22,
-    fontWeight: "700",
-    letterSpacing: 1,
+  logo: {
+    width: 160,
+    height: 160,
     marginBottom: spacing.lg,
   },
   instructionText: {
