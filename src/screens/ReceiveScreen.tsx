@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   StyleSheet,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -25,6 +26,7 @@ import * as Clipboard from "expo-clipboard";
 import QRCode from "react-native-qrcode-svg";
 import Svg, { Path, Polyline, Rect } from "react-native-svg";
 import type { SparkWallet as SparkWalletType } from "@buildonspark/spark-sdk";
+import { shortenInvoice } from "../invoice-format";
 import { colors, radii, spacing } from "../theme";
 
 // Hand-drawn (Feather-style) icons via react-native-svg -- already a
@@ -51,6 +53,7 @@ function CheckIcon({ color, size = 20 }: { color: string; size?: number }) {
 export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onBack: () => void }) {
   const [amountText, setAmountText] = useState("");
   const [invoice, setInvoice] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   // The amount the *currently displayed* invoice was actually generated
   // for -- kept separate from `amountText` so the on-screen label always
   // reflects what the QR code really encodes, not whatever's mid-typing
@@ -108,7 +111,11 @@ export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onB
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <TouchableOpacity onPress={onBack} style={styles.backButton}>
         <Text style={styles.backText}>{"< Back"}</Text>
       </TouchableOpacity>
@@ -134,9 +141,11 @@ export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onB
             {invoiceAmountSats && invoiceAmountSats > 0 ? `${invoiceAmountSats} sats` : "Any amount"}
             {generating && "  (updating...)"}
           </Text>
-          <Text style={styles.invoiceText} numberOfLines={3} ellipsizeMode="middle">
-            {invoice}
-          </Text>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => setExpanded((e) => !e)}>
+            <Text style={styles.invoiceText} numberOfLines={expanded ? undefined : 1}>
+              {expanded ? invoice : shortenInvoice(invoice)}
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.copyButton} onPress={copy}>
             {copied ? <CheckIcon color={colors.success} /> : <CopyIcon color={colors.textPrimary} />}
           </TouchableOpacity>
@@ -149,14 +158,17 @@ export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onB
         </View>
       )}
       {error && <Text style={styles.error}>{error}</Text>}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scroll: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  container: {
+    flexGrow: 1,
     padding: spacing.lg,
     paddingTop: 60,
   },

@@ -67,6 +67,7 @@ export function SendScreen({
   const unitLabel = btc ? "BTC" : "sats";
   const formatAmount = (sats: bigint) => (btc ? formatBtc(sats) : sats.toString());
   const [invoice, setInvoice] = useState("");
+  const [invoiceFocused, setInvoiceFocused] = useState(false);
   const [amountText, setAmountText] = useState("");
   // The amount a *fixed-amount* invoice carries, decoded as the invoice
   // text changes -- `null` means either the invoice hasn't been
@@ -91,9 +92,9 @@ export function SendScreen({
   const [permission, requestPermission] = useCameraPermissions();
 
   const handleInvoiceChange = (text: string) => {
-    setInvoice(text);
-    setError(null);
     const trimmed = text.trim();
+    setInvoice(trimmed);
+    setError(null);
     if (!trimmed) {
       setInvoiceAmountSats(null);
       setInvoiceDecoded(false);
@@ -244,7 +245,7 @@ export function SendScreen({
             ...(invoiceAmountSats === null ? { amountSatsToSend: Number(effectiveAmountSats) } : {}),
           }),
       );
-      setPayOutcome({ ok: true, message: `${formatAmount(effectiveAmountSats)} ${unitLabel} sent -- status: ${payment.status}` });
+      setPayOutcome({ ok: true, message: `${formatAmount(effectiveAmountSats)} ${unitLabel} sent` });
       onPaid();
     } catch (err) {
       setPayOutcome({ ok: false, message: String(err) });
@@ -312,16 +313,34 @@ export function SendScreen({
       <Text style={styles.title}>Send</Text>
 
       <Text style={styles.label}>Lightning invoice</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="lnbc..."
-        placeholderTextColor={colors.textMuted}
-        value={invoice}
-        onChangeText={handleInvoiceChange}
-        autoCapitalize="none"
-        autoCorrect={false}
-        multiline
-      />
+      {invoiceFocused ? (
+        <TextInput
+          style={[styles.input, styles.inputExpanded]}
+          placeholder="lnbc..."
+          placeholderTextColor={colors.textMuted}
+          value={invoice}
+          onChangeText={handleInvoiceChange}
+          onBlur={() => setInvoiceFocused(false)}
+          autoFocus
+          autoCapitalize="none"
+          autoCorrect={false}
+          multiline
+        />
+      ) : (
+        <TouchableOpacity activeOpacity={0.7} onPress={() => setInvoiceFocused(true)}>
+          <Text
+            style={[styles.input, !invoice && styles.inputPlaceholder]}
+            numberOfLines={1}
+            ellipsizeMode="middle"
+          >
+            {invoice || "lnbc..."}
+          </Text>
+        </TouchableOpacity>
+      )}
+      {invoiceDecoded && <Text style={styles.validText}>Valid Lightning invoice</Text>}
+      {!invoiceDecoded && invoice !== "" && !invoiceFocused && (
+        <Text style={styles.invalidText}>Not a valid Lightning invoice</Text>
+      )}
 
       <TouchableOpacity style={styles.secondaryButtonOutline} onPress={startScan}>
         <Text style={styles.secondaryButtonOutlineText}>Scan QR code</Text>
@@ -424,9 +443,24 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 15,
     fontFamily: "monospace",
+    marginBottom: spacing.md,
+  },
+  validText: {
+    color: colors.success,
+    fontSize: 13,
+    marginBottom: spacing.md,
+  },
+  invalidText: {
+    color: colors.error,
+    fontSize: 13,
+    marginBottom: spacing.md,
+  },
+  inputPlaceholder: {
+    color: colors.textMuted,
+  },
+  inputExpanded: {
     minHeight: 90,
     textAlignVertical: "top",
-    marginBottom: spacing.md,
   },
   amountInput: {
     backgroundColor: colors.surface,

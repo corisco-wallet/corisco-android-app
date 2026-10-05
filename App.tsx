@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
-import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SparkWallet, SparkWalletEvent, type SparkWallet as SparkWalletType } from "@buildonspark/spark-sdk";
 import type { WalletTransfer } from "@buildonspark/spark-sdk/types";
 import { BleHardwareSigner } from "./src/ble-hardware-signer";
@@ -19,6 +19,7 @@ import {
   touchLastConnected,
   type SavedDevice,
 } from "./src/device-store";
+import { showAlert } from "./src/components/AppAlert";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { NameSignerScreen } from "./src/screens/NameSignerScreen";
 import { PairScanScreen } from "./src/screens/PairScanScreen";
@@ -31,6 +32,8 @@ import { TransactionDetailScreen } from "./src/screens/TransactionDetailScreen";
 import { fetchBtcPrice } from "./src/price";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from "./src/settings-store";
 import { SPARK_NETWORK } from "./src/network";
+
+const bytesToHex = (bytes: Uint8Array) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 
 type Screen = "home" | "receive" | "send" | "settings" | "transaction";
 
@@ -209,7 +212,7 @@ export default function App() {
       }
     } catch (claimErr) {
       console.warn("claimTransfers failed:", claimErr);
-      Alert.alert("Claim failed", String(claimErr));
+      showAlert("Claim failed", String(claimErr));
     } finally {
       setClaiming(false);
     }
@@ -264,7 +267,7 @@ export default function App() {
     }
   }, []);
 
-  const connectAndInit = useCallback(async (targetDeviceId: string) => {
+  const connectAndInit = useCallback(async (targetDeviceId: string, expected?: SavedDevice) => {
     setConnecting(true);
     setConnectingId(targetDeviceId);
     setInitError(null);
@@ -272,8 +275,30 @@ export default function App() {
     try {
       const { deviceId, deviceName } = await conn.connect(setConnectStatus, targetDeviceId);
 
-      setConnectStatus("Starting wallet...");
       const signer = new BleHardwareSigner(conn);
+      if (expected) {
+        setConnectStatus("Verifying wallet...");
+        const devicePubkey = bytesToHex(await signer.getIdentityPublicKey());
+        if (devicePubkey !== expected.identityPubkey) {
+          await conn.disconnect().catch(() => {});
+          setInitError(`The device does not match the saved wallet "${expected.name}".`);
+          showAlert(
+            "Wallet mismatch",
+            `The device you connected to has a different public key than the saved wallet "${expected.name}". The connection was cancelled.`,
+            [
+              { text: "Keep wallet", style: "cancel" },
+              {
+                text: "Forget wallet",
+                style: "destructive",
+                onPress: () => void forgetDevice(expected).then(startPairScan),
+              },
+            ],
+          );
+          return;
+        }
+      }
+
+      setConnectStatus("Starting wallet...");
       const { wallet: w } = await SparkWallet.initialize({
         signer,
         options: { network: SPARK_NETWORK, signerWithPreExistingKeys: true },
@@ -357,7 +382,7 @@ export default function App() {
       setLoading(false);
       setSyncing(false);
     }
-  }, [savedDevices, refreshBalance, refreshTransfers, claimPending, optimizePending]);
+  }, [savedDevices, forgetDevice, startPairScan, refreshBalance, refreshTransfers, claimPending, optimizePending]);
 
   // Tears down the live BLE connection and drops back to the signer picker
   // -- e.g. to switch which physical device this session is talking to,
@@ -503,7 +528,7 @@ export default function App() {
             connectingId={connectingId}
             connectStatus={connectStatus}
             initError={initError}
-            onSelect={(device) => void connectAndInit(device.id)}
+            onSelect={(device) => void connectAndInit(device.id, device)}
             onForget={(device) => void forgetDevice(device)}
             onPairNew={() => void startPairScan()}
           />

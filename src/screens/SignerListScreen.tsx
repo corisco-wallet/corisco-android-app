@@ -4,7 +4,8 @@
 // device's bond goes stale (re-flashed, factory-reset) and it would
 // otherwise sit in the list as a dead entry.
 
-import { Alert, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { showAlert } from "../components/AppAlert";
 import { colors, radii, spacing } from "../theme";
 import type { SavedDevice } from "../device-store";
 
@@ -49,7 +50,7 @@ export function SignerListScreen({
               disabled={connecting}
               onPress={() => onSelect(item)}
               onLongPress={() =>
-                Alert.alert("Forget signer?", `Remove "${item.name}" from this list?`, [
+                showAlert("Forget wallet?", `Remove "${item.name}" from this list?`, [
                   { text: "Cancel", style: "cancel" },
                   { text: "Forget", style: "destructive", onPress: () => onForget(item) },
                 ])

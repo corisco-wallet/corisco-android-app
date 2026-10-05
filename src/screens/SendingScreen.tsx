@@ -42,7 +42,6 @@ export function SendingScreen({ label }: { label: string }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.brandText}>Corisco</Text>
       <Animated.View style={[styles.ring, { transform: [{ rotate: spin }] }]}>
         <Svg width={SIZE} height={SIZE}>
           <Circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} stroke={colors.border} strokeWidth={STROKE_WIDTH} fill="none" />

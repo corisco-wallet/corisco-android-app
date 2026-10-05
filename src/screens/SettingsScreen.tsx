@@ -3,7 +3,8 @@
 // stays focused on the balance/activity, and destructive-ish actions live
 // somewhere a stray tap can't reach them.
 
-import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import { showAlert } from "../components/AppAlert";
 import { colors, radii, spacing } from "../theme";
 import { CURRENCIES, TRANSACTION_COUNT_OPTIONS, type BalanceUnit, type Settings } from "../settings-store";
 
@@ -96,7 +97,7 @@ export function SettingsScreen({
       <TouchableOpacity
         style={styles.disconnectButton}
         onPress={() =>
-          Alert.alert("Disconnect wallet?", "You can reconnect to it anytime from the signer list.", [
+          showAlert("Disconnect wallet?", "You can reconnect to it anytime from the wallet list.", [
             { text: "Cancel", style: "cancel" },
             { text: "Disconnect", style: "destructive", onPress: onDisconnect },
           ])
