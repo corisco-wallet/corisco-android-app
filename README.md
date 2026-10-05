@@ -169,3 +169,8 @@ shows up on install) and install it from the phone's file manager instead.
   `/dev/bus/usb/*` permissions (`sudo chmod 666 /dev/bus/usb/<bus>/<dev>`),
   and if the device drops out mid-session, reattach it via `usbipd` on the
   Windows host rather than just unplugging/replugging.
+
+## License
+
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or
+[MIT license](LICENSE-MIT) at your option.
