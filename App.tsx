@@ -64,6 +64,7 @@ export default function App() {
   const [connectStatus, setConnectStatus] = useState("");
   const signerRef = useRef<BleHardwareSigner | null>(null);
   const connRef = useRef<BleSignerConnection | null>(null);
+  const walletRef = useRef<SparkWalletType | null>(null);
 
   // Shown full-screen between a successful BLE connection and Home --
   // claiming/optimizing/fetching balance+transfers are real round-trips,
@@ -267,8 +268,8 @@ export default function App() {
     setConnecting(true);
     setConnectingId(targetDeviceId);
     setInitError(null);
+    const conn = new BleSignerConnection();
     try {
-      const conn = new BleSignerConnection();
       const { deviceId, deviceName } = await conn.connect(setConnectStatus, targetDeviceId);
 
       setConnectStatus("Starting wallet...");
@@ -278,6 +279,7 @@ export default function App() {
         options: { network: SPARK_NETWORK, signerWithPreExistingKeys: true },
       });
       setWallet(w);
+      walletRef.current = w;
       signerRef.current = signer;
       connRef.current = conn;
       // Clears whatever screen led here (PairScanScreen in particular --
@@ -346,6 +348,9 @@ export default function App() {
       await new Promise((resolve) => setTimeout(resolve, 400));
     } catch (err) {
       setInitError(String(err));
+      // No wallet took ownership of this connection, so don't leave the BLE
+      // link open behind the error screen.
+      if (connRef.current !== conn) await conn.disconnect().catch(() => {});
     } finally {
       setConnecting(false);
       setConnectingId(null);
@@ -359,7 +364,19 @@ export default function App() {
   // without force-quitting the app. Resets every piece of per-wallet state
   // this component holds so the next `connectAndInit` starts from a clean
   // slate, same as a fresh app launch.
+  //
+  // The SparkWallet is cleaned up first: it runs its own background timers
+  // (e.g. token output optimization) that keep signing through the old
+  // `BleSignerConnection`, so leaving it alive after the BLE link is closed
+  // makes them fail with "BleSignerConnection: not connected" forever --
+  // even once a new wallet/connection is up.
   const disconnectWallet = useCallback(async () => {
+    try {
+      await walletRef.current?.cleanupConnections();
+    } catch (err) {
+      console.warn("wallet cleanup failed:", err);
+    }
+    walletRef.current = null;
     try {
       await connRef.current?.disconnect();
     } catch (err) {
@@ -558,6 +575,8 @@ export default function App() {
           // connectAndInit, and this screen only renders once `wallet` is
           // truthy.
           signer={signerRef.current!}
+          settings={settings}
+          availableSats={availableSats}
           onBack={() => setScreen("home")}
           onPaid={() => {
             void onRefresh();

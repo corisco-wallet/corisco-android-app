@@ -6,6 +6,10 @@
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { WalletTransfer } from "@buildonspark/spark-sdk/types";
 import { colors, radii, spacing } from "../theme";
+import { formatBtc } from "../price";
+import type { Settings } from "../settings-store";
+
+const HIDDEN = "••••••";
 
 // Shared with TransactionDetailScreen.tsx, which shows the full name for
 // whichever type this maps -- kept here since this is where the type ->
@@ -28,10 +32,13 @@ function formatWhen(date: Date | undefined): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function Row({ transfer, onPress }: { transfer: WalletTransfer; onPress: () => void }) {
+function Row({ transfer, settings, onPress }: { transfer: WalletTransfer; settings: Settings; onPress: () => void }) {
   const incoming = transfer.transferDirection === "INCOMING";
   const label = TYPE_LABELS[transfer.type] ?? transfer.type;
   const pending = transfer.status !== "TRANSFER_STATUS_COMPLETED";
+  const sats = BigInt(Math.trunc(transfer.totalValue));
+  const btc = settings.balanceUnit === "btc";
+  const amountText = settings.hideAmounts ? HIDDEN : btc ? formatBtc(sats) : sats.toString();
 
   return (
     <TouchableOpacity style={styles.row} onPress={onPress}>
@@ -47,7 +54,8 @@ function Row({ transfer, onPress }: { transfer: WalletTransfer; onPress: () => v
       </View>
       <Text style={[styles.amount, incoming ? styles.amountIn : styles.amountOut]}>
         {incoming ? "+" : "-"}
-        {transfer.totalValue}
+        {amountText}
+        {btc ? " BTC" : ""}
       </Text>
     </TouchableOpacity>
   );
@@ -56,10 +64,12 @@ function Row({ transfer, onPress }: { transfer: WalletTransfer; onPress: () => v
 export function ActivityList({
   transfers,
   loading,
+  settings,
   onSelect,
 }: {
   transfers: WalletTransfer[];
   loading: boolean;
+  settings: Settings;
   onSelect: (transfer: WalletTransfer) => void;
 }) {
   return (
@@ -72,7 +82,7 @@ export function ActivityList({
       ) : (
         <View style={styles.list}>
           {transfers.map((t) => (
-            <Row key={t.id} transfer={t} onPress={() => onSelect(t)} />
+            <Row key={t.id} transfer={t} settings={settings} onPress={() => onSelect(t)} />
           ))}
         </View>
       )}

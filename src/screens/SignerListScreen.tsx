@@ -66,7 +66,7 @@ export function SignerListScreen({
       />
 
       <TouchableOpacity style={styles.pairButton} disabled={connecting} onPress={onPairNew}>
-        <Text style={styles.pairButtonText}>{connecting && !connectingId ? connectStatus : "+ Pair new signer"}</Text>
+        <Text style={styles.pairButtonText}>{connecting && !connectingId ? connectStatus : "+ Pair new wallet"}</Text>
       </TouchableOpacity>
     </View>
   );

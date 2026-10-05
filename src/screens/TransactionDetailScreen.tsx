@@ -42,6 +42,28 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
   );
 }
 
+const SATS_PER_UNIT: Record<string, number> = {
+  SATOSHI: 1,
+  MILLISATOSHI: 0.001,
+  BITCOIN: 100_000_000,
+  MILLIBITCOIN: 100_000,
+  MICROBITCOIN: 100,
+  NANOBITCOIN: 0.1,
+};
+
+type SdkAmount = { originalValue: number; originalUnit: string };
+
+function amountToSats(amount: SdkAmount | undefined): number {
+  return (amount?.originalValue ?? 0) * (SATS_PER_UNIT[amount?.originalUnit ?? ""] ?? 0);
+}
+
+function transferFeeSats(transfer: WalletTransfer): bigint | null {
+  const request = transfer.userRequest as { fee?: SdkAmount; l1BroadcastFee?: SdkAmount } | undefined;
+  if (!request?.fee) return null;
+  const total = Math.ceil(amountToSats(request.fee) + amountToSats(request.l1BroadcastFee));
+  return total > 0 ? BigInt(total) : null;
+}
+
 export function TransactionDetailScreen({
   transfer,
   settings,
@@ -56,6 +78,8 @@ export function TransactionDetailScreen({
   const incoming = transfer.transferDirection === "INCOMING";
   const sats = BigInt(Math.trunc(transfer.totalValue));
   const amountText = settings.balanceUnit === "btc" ? formatBtc(sats) : sats.toString();
+  const feeSats = transferFeeSats(transfer);
+  const feeText = feeSats === null ? null : settings.balanceUnit === "btc" ? formatBtc(feeSats) : feeSats.toString();
   const fiatText = btcPrice !== null ? formatFiat(satsToFiat(sats, btcPrice), settings.currency) : null;
   const label = TYPE_LABELS[transfer.type] ?? transfer.type;
   const pending = transfer.status !== "TRANSFER_STATUS_COMPLETED";
@@ -86,6 +110,12 @@ export function TransactionDetailScreen({
         <DetailRow label="Type" value={label} />
         <DetailRow label="Date" value={formatDateTime(transfer.createdTime)} />
         <DetailRow label="Status" value={humanizeStatus(transfer.status)} />
+        {feeText !== null && (
+          <DetailRow
+            label="Fee"
+            value={`${settings.hideAmounts ? HIDDEN : feeText} ${settings.balanceUnit === "btc" ? "BTC" : "sats"}`}
+          />
+        )}
         {incoming ? (
           <DetailRow label="From" value={shortHex(transfer.senderIdentityPublicKey)} mono />
         ) : (
