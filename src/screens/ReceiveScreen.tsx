@@ -27,6 +27,8 @@ import QRCode from "react-native-qrcode-svg";
 import Svg, { Path, Polyline, Rect } from "react-native-svg";
 import type { SparkWallet as SparkWalletType } from "@buildonspark/spark-sdk";
 import { shortenInvoice } from "../invoice-format";
+import { btcToSats, formatBtc } from "../price";
+import type { Settings } from "../settings-store";
 import { colors, radii, spacing } from "../theme";
 
 // Hand-drawn (Feather-style) icons via react-native-svg -- already a
@@ -50,8 +52,32 @@ function CheckIcon({ color, size = 20 }: { color: string; size?: number }) {
   );
 }
 
-export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onBack: () => void }) {
+const MAX_MEMO_LENGTH = 100;
+
+function parseAmountSats(text: string, btc: boolean): number | null {
+  const trimmed = text.trim();
+  if (trimmed === "") return 0;
+  if (btc) {
+    const sats = btcToSats(trimmed);
+    return sats === null ? null : Number(sats);
+  }
+  return /^\d+$/.test(trimmed) ? Number(trimmed) : null;
+}
+
+export function ReceiveScreen({
+  wallet,
+  settings,
+  onBack,
+}: {
+  wallet: SparkWalletType;
+  settings: Settings;
+  onBack: () => void;
+}) {
+  const btc = settings.balanceUnit === "btc";
+  const unitLabel = btc ? "BTC" : "sats";
+  const formatAmount = (sats: number) => (btc ? formatBtc(BigInt(sats)) : String(sats));
   const [amountText, setAmountText] = useState("");
+  const [memoText, setMemoText] = useState("");
   const [invoice, setInvoice] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   // The amount the *currently displayed* invoice was actually generated
@@ -69,8 +95,8 @@ export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onB
   // changed again from clobbering a newer one that resolves first.
   useEffect(() => {
     let cancelled = false;
-    const amountSats = amountText.trim() === "" ? 0 : Math.floor(Number(amountText));
-    if (Number.isNaN(amountSats) || amountSats < 0) {
+    const amountSats = parseAmountSats(amountText, btc);
+    if (amountSats === null) {
       setError("Enter a valid amount, or leave it blank for any amount");
       return;
     }
@@ -82,7 +108,7 @@ export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onB
     const delay = amountText.trim() === "" && invoice === null ? 0 : 400;
     const timer = setTimeout(() => {
       wallet
-        .createLightningInvoice({ amountSats, memo: "Corisco" })
+        .createLightningInvoice({ amountSats, memo: memoText.trim() || undefined })
         .then((request) => {
           if (cancelled) return;
           setInvoice(request.invoice.encodedInvoice);
@@ -101,7 +127,7 @@ export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onB
       clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amountText, wallet]);
+  }, [amountText, memoText, btc, wallet]);
 
   const copy = async () => {
     if (!invoice) return;
@@ -122,14 +148,23 @@ export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onB
 
       <Text style={styles.title}>Receive</Text>
 
-      <Text style={styles.label}>Amount (sats) -- optional</Text>
+      <Text style={styles.label}>Amount ({unitLabel})</Text>
       <TextInput
         style={styles.input}
         placeholder="Any amount"
         placeholderTextColor={colors.textMuted}
         value={amountText}
         onChangeText={setAmountText}
-        keyboardType="number-pad"
+        keyboardType={btc ? "decimal-pad" : "number-pad"}
+      />
+
+      <TextInput
+        style={styles.input}
+        placeholder="Add a note"
+        placeholderTextColor={colors.textMuted}
+        value={memoText}
+        onChangeText={setMemoText}
+        maxLength={MAX_MEMO_LENGTH}
       />
 
       {invoice && !error && (
@@ -138,7 +173,7 @@ export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onB
             <QRCode value={invoice} size={210} backgroundColor="#FFFFFF" color="#000000" />
           </View>
           <Text style={styles.amountLabel}>
-            {invoiceAmountSats && invoiceAmountSats > 0 ? `${invoiceAmountSats} sats` : "Any amount"}
+            {invoiceAmountSats && invoiceAmountSats > 0 ? `${formatAmount(invoiceAmountSats)} ${unitLabel}` : "Any amount"}
             {generating && "  (updating...)"}
           </Text>
           <TouchableOpacity activeOpacity={0.7} onPress={() => setExpanded((e) => !e)}>

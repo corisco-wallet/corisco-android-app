@@ -8,6 +8,7 @@ import type { WalletTransfer } from "@buildonspark/spark-sdk/types";
 import { colors, radii, spacing } from "../theme";
 import { formatBtc } from "../price";
 import type { Settings } from "../settings-store";
+import { transferMemo } from "../transfer-memo";
 
 const HIDDEN = "••••••";
 
@@ -38,6 +39,7 @@ function Row({ transfer, settings, onPress }: { transfer: WalletTransfer; settin
   const pending = transfer.status !== "TRANSFER_STATUS_COMPLETED";
   const sats = BigInt(Math.trunc(transfer.totalValue));
   const btc = settings.balanceUnit === "btc";
+  const memo = incoming ? transferMemo(transfer) : null;
   const amountText = settings.hideAmounts ? HIDDEN : btc ? formatBtc(sats) : sats.toString();
 
   return (
@@ -51,6 +53,11 @@ function Row({ transfer, settings, onPress }: { transfer: WalletTransfer; settin
           {formatWhen(transfer.createdTime)}
           {pending ? " · pending" : ""}
         </Text>
+        {memo && (
+          <Text style={styles.memo} numberOfLines={1}>
+            {memo}
+          </Text>
+        )}
       </View>
       <Text style={[styles.amount, incoming ? styles.amountIn : styles.amountOut]}>
         {incoming ? "+" : "-"}
@@ -156,6 +163,11 @@ const styles = StyleSheet.create({
   },
   when: {
     color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  memo: {
+    color: colors.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },

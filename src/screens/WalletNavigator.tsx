@@ -62,7 +62,7 @@ export function WalletNavigator(props: Props) {
           btcPrice={btcPrice}
         />
       )}
-      {screen === "receive" && <ReceiveScreen wallet={wallet} onBack={goHome} />}
+      {screen === "receive" && <ReceiveScreen wallet={wallet} settings={settings} onBack={goHome} />}
       {screen === "send" && (
         <SendScreen
           wallet={wallet}

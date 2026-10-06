@@ -8,6 +8,7 @@ import { colors, radii, spacing } from "../theme";
 import { formatBtc, formatFiat, satsToFiat } from "../price";
 import type { Settings } from "../settings-store";
 import { TYPE_LABELS } from "../components/ActivityList";
+import { transferMemo } from "../transfer-memo";
 
 const HIDDEN = "••••••";
 
@@ -81,6 +82,7 @@ export function TransactionDetailScreen({
   const feeSats = transferFeeSats(transfer);
   const feeText = feeSats === null ? null : settings.balanceUnit === "btc" ? formatBtc(feeSats) : feeSats.toString();
   const fiatText = btcPrice !== null ? formatFiat(satsToFiat(sats, btcPrice), settings.currency) : null;
+  const memo = incoming ? transferMemo(transfer) : null;
   const label = TYPE_LABELS[transfer.type] ?? transfer.type;
   const pending = transfer.status !== "TRANSFER_STATUS_COMPLETED";
 
@@ -108,6 +110,7 @@ export function TransactionDetailScreen({
 
       <View style={styles.detailsCard}>
         <DetailRow label="Type" value={label} />
+        {memo && <DetailRow label="Note" value={memo} />}
         <DetailRow label="Date" value={formatDateTime(transfer.createdTime)} />
         <DetailRow label="Status" value={humanizeStatus(transfer.status)} />
         {feeText !== null && (
