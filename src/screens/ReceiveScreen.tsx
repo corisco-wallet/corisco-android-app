@@ -27,7 +27,8 @@ import QRCode from "react-native-qrcode-svg";
 import Svg, { Path, Polyline, Rect } from "react-native-svg";
 import type { SparkWallet as SparkWalletType } from "@buildonspark/spark-sdk";
 import { shortenInvoice } from "../invoice-format";
-import { btcToSats, formatBtc } from "../price";
+import { formatBtc } from "../price";
+import { MAX_MEMO_LENGTH, createReceiveInvoice, parseAmountSats } from "../receive-invoice";
 import type { Settings } from "../settings-store";
 import { colors, radii, spacing } from "../theme";
 
@@ -50,18 +51,6 @@ function CheckIcon({ color, size = 20 }: { color: string; size?: number }) {
       <Polyline points="20 6 9 17 4 12" />
     </Svg>
   );
-}
-
-const MAX_MEMO_LENGTH = 100;
-
-function parseAmountSats(text: string, btc: boolean): number | null {
-  const trimmed = text.trim();
-  if (trimmed === "") return 0;
-  if (btc) {
-    const sats = btcToSats(trimmed);
-    return sats === null ? null : Number(sats);
-  }
-  return /^\d+$/.test(trimmed) ? Number(trimmed) : null;
 }
 
 export function ReceiveScreen({
@@ -107,11 +96,10 @@ export function ReceiveScreen({
     // tap required. Only typing an amount afterward debounces.
     const delay = amountText.trim() === "" && invoice === null ? 0 : 400;
     const timer = setTimeout(() => {
-      wallet
-        .createLightningInvoice({ amountSats, memo: memoText.trim() || undefined })
-        .then((request) => {
+      createReceiveInvoice(wallet, amountSats, memoText)
+        .then((encodedInvoice) => {
           if (cancelled) return;
-          setInvoice(request.invoice.encodedInvoice);
+          setInvoice(encodedInvoice);
           setInvoiceAmountSats(amountSats);
         })
         .catch((err) => {
