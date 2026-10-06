@@ -13,40 +13,19 @@ import {
   View,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { decode as decodeBolt11 } from "light-bolt11-decoder";
 import type { SparkWallet as SparkWalletType } from "@buildonspark/spark-sdk";
 import type { BleHardwareSigner } from "../ble-hardware-signer";
 import { colors, radii, spacing } from "../theme";
-import { btcToSats, formatBtc } from "../price";
+import { formatBtc } from "../price";
+import {
+  decodeInvoiceAmountSats,
+  isInsufficientFunds,
+  parseManualAmountSats,
+  payInvoice,
+} from "../send-payment";
 import type { Settings } from "../settings-store";
 import { SendingScreen } from "./SendingScreen";
 import { SendResultScreen } from "./SendResultScreen";
-
-/** Shortens the raw invoice string for the device's small screen -- same
- * head+tail truncation style `esp32-lilygo-t-display-s3-firmware/src/main.rs`'s
- * `short_id` already uses for leaf ids. Deliberately the invoice itself, not its
- * bolt11 description: a description is arbitrary, untrusted memo text the
- * payee chose (doesn't identify *what's being paid* at all, and could be
- * written to look like something it isn't), whereas a fragment of the
- * actual invoice at least lets a human visually match the confirm screen
- * against the invoice/QR code they meant to pay. */
-function shortInvoice(invoice: string): string {
-  return invoice.length <= 22 ? invoice : `${invoice.slice(0, 12)}…${invoice.slice(-8)}`;
-}
-
-/** Pulls the amount (sats) out of a bolt11 invoice, for
- * `BleHardwareSigner.withSpendContext` -- shown on the device's own
- * confirm screen (see that method's doc comment on why this is
- * app-asserted, not independently verified against what's actually
- * signed). `null` means a 0-amount/any-amount invoice; matches
- * `amountSatsToSend` being required in that case (see `pay` below). */
-function decodeInvoiceAmountSats(invoice: string): bigint | null {
-  const { sections } = decodeBolt11(invoice);
-  for (const section of sections) {
-    if (section.name === "amount") return BigInt(section.value) / 1000n;
-  }
-  return null;
-}
 
 export function SendScreen({
   wallet,
@@ -133,11 +112,7 @@ export function SendScreen({
   // What amount actually gets sent: the invoice's own fixed amount if it
   // has one, otherwise whatever's typed into the amount field (for a
   // 0-amount invoice, where the payer chooses).
-  const manualAmountSats = (() => {
-    const text = amountText.trim();
-    const parsed = btc ? btcToSats(text) : /^\d+$/.test(text) ? BigInt(text) : null;
-    return parsed !== null && parsed > 0n ? parsed : null;
-  })();
+  const manualAmountSats = parseManualAmountSats(amountText, btc);
   const effectiveAmountSats = invoiceAmountSats ?? manualAmountSats;
 
   // Real fee estimate (not a guess) from the SDK, refetched whenever the
@@ -188,10 +163,12 @@ export function SendScreen({
     };
   }, [invoice, effectiveAmountSats, invoiceAmountSats, wallet]);
 
-  const insufficientFunds =
-    availableSats !== null &&
-    effectiveAmountSats !== null &&
-    effectiveAmountSats + (feeLoading ? 0n : (feeEstimateSats ?? 0n)) > availableSats;
+  const insufficientFunds = isInsufficientFunds({
+    availableSats,
+    amountSats: effectiveAmountSats,
+    feeSats: feeEstimateSats,
+    feeLoading,
+  });
   const canPay = invoiceDecoded && effectiveAmountSats !== null && !feeLoading && !insufficientFunds;
 
   const sendMax = async () => {
@@ -230,21 +207,12 @@ export function SendScreen({
       // `withSpendContext`'s doc comment for why it doesn't try to filter
       // out any of them (a real spend silently went through with none
       // shown at all, when this tried inferring which one to skip).
-      const payment = await signer.withSpendContext(
-        { amountSats: effectiveAmountSats, destination: shortInvoice(trimmed) },
-        () =>
-          wallet.payLightningInvoice({
-            invoice: trimmed,
-            // The real estimate (plus a small margin) when we have one,
-            // rather than an arbitrary flat cap -- falls back to 100 sats
-            // if the estimate never came back.
-            maxFeeSats: feeEstimateSats !== null ? Number(feeEstimateSats) + 10 : 100,
-            preferSpark: false,
-            // Only set (and only accepted by the SDK) for a 0-amount
-            // invoice -- a fixed-amount invoice already carries its own.
-            ...(invoiceAmountSats === null ? { amountSatsToSend: Number(effectiveAmountSats) } : {}),
-          }),
-      );
+      await payInvoice(wallet, signer, {
+        invoice: trimmed,
+        invoiceAmountSats,
+        amountSats: effectiveAmountSats,
+        feeEstimateSats,
+      });
       setPayOutcome({ ok: true, message: `${formatAmount(effectiveAmountSats)} ${unitLabel} sent` });
       onPaid();
     } catch (err) {
