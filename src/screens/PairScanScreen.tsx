@@ -1,11 +1,6 @@
 // Shown the first time a signer is paired (and any time the user asks to
-// pair another one): scans for nearby devices and lists them, rather than
-// silently connecting to whichever one is found first. Today every real
-// signer advertises the same fixed name (`SparkHW` -- see ble-transport.ts's
-// `scanForCandidates` doc comment), so this list can only ever show one
-// distinct entry in practice; the picker exists now so that a future
-// firmware change giving each device its own default name makes multiple
-// nearby signers distinguishable with no app change beyond that.
+// pair another one): scans for nearby signers and lists them by their
+// advertised `Corisco-<id>` name, which matches the id on the device's screen.
 
 import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { colors, radii, spacing } from "../theme";
