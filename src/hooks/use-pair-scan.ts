@@ -36,12 +36,12 @@ export function usePairScan(setInitError: (error: string | null) => void) {
     stopRef.current?.();
     stopRef.current = null;
     connRef.current = null;
+    setScanning(false);
   }, []);
 
   const cancel = useCallback(() => {
     stop();
     setActive(false);
-    setScanning(false);
   }, [stop]);
 
   return { active, scanning, candidates, start, stop, cancel };
