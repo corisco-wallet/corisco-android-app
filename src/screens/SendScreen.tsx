@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,51 +13,40 @@ import {
   View,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { decode as decodeBolt11 } from "light-bolt11-decoder";
 import type { SparkWallet as SparkWalletType } from "@buildonspark/spark-sdk";
 import type { BleHardwareSigner } from "../ble-hardware-signer";
 import { colors, radii, spacing } from "../theme";
+import { formatBtc } from "../price";
+import {
+  decodeInvoiceAmountSats,
+  isInsufficientFunds,
+  parseManualAmountSats,
+  payInvoice,
+} from "../send-payment";
+import type { Settings } from "../settings-store";
 import { SendingScreen } from "./SendingScreen";
 import { SendResultScreen } from "./SendResultScreen";
-
-/** Shortens the raw invoice string for the device's small screen -- same
- * head+tail truncation style `esp32-lilygo-t-display-s3-firmware/src/main.rs`'s
- * `short_id` already uses for leaf ids. Deliberately the invoice itself, not its
- * bolt11 description: a description is arbitrary, untrusted memo text the
- * payee chose (doesn't identify *what's being paid* at all, and could be
- * written to look like something it isn't), whereas a fragment of the
- * actual invoice at least lets a human visually match the confirm screen
- * against the invoice/QR code they meant to pay. */
-function shortInvoice(invoice: string): string {
-  return invoice.length <= 22 ? invoice : `${invoice.slice(0, 12)}…${invoice.slice(-8)}`;
-}
-
-/** Pulls the amount (sats) out of a bolt11 invoice, for
- * `BleHardwareSigner.withSpendContext` -- shown on the device's own
- * confirm screen (see that method's doc comment on why this is
- * app-asserted, not independently verified against what's actually
- * signed). `null` means a 0-amount/any-amount invoice; matches
- * `amountSatsToSend` being required in that case (see `pay` below). */
-function decodeInvoiceAmountSats(invoice: string): bigint | null {
-  const { sections } = decodeBolt11(invoice);
-  for (const section of sections) {
-    if (section.name === "amount") return BigInt(section.value) / 1000n;
-  }
-  return null;
-}
 
 export function SendScreen({
   wallet,
   signer,
+  settings,
+  availableSats,
   onBack,
   onPaid,
 }: {
   wallet: SparkWalletType;
   signer: BleHardwareSigner;
+  settings: Settings;
+  availableSats: bigint | null;
   onBack: () => void;
   onPaid: () => void;
 }) {
+  const btc = settings.balanceUnit === "btc";
+  const unitLabel = btc ? "BTC" : "sats";
+  const formatAmount = (sats: bigint) => (btc ? formatBtc(sats) : sats.toString());
   const [invoice, setInvoice] = useState("");
+  const [invoiceFocused, setInvoiceFocused] = useState(false);
   const [amountText, setAmountText] = useState("");
   // The amount a *fixed-amount* invoice carries, decoded as the invoice
   // text changes -- `null` means either the invoice hasn't been
@@ -68,6 +58,8 @@ export function SendScreen({
   // sending one alongside a fixed-amount invoice isn't a real option, so
   // there's nothing meaningful to type there.
   const [invoiceAmountSats, setInvoiceAmountSats] = useState<bigint | null>(null);
+  const [invoiceDecoded, setInvoiceDecoded] = useState(false);
+  const [maxLoading, setMaxLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [paying, setPaying] = useState(false);
   // Full-screen result shown once `pay()` finishes, success or failure --
@@ -79,21 +71,24 @@ export function SendScreen({
   const [permission, requestPermission] = useCameraPermissions();
 
   const handleInvoiceChange = (text: string) => {
-    setInvoice(text);
-    setError(null);
     const trimmed = text.trim();
+    setInvoice(trimmed);
+    setError(null);
     if (!trimmed) {
       setInvoiceAmountSats(null);
+      setInvoiceDecoded(false);
       return;
     }
     try {
       const decoded = decodeInvoiceAmountSats(trimmed);
       setInvoiceAmountSats(decoded);
-      if (decoded !== null) setAmountText(decoded.toString());
+      setInvoiceDecoded(true);
+      if (decoded !== null) setAmountText(formatAmount(decoded));
     } catch {
       // Not yet a decodable invoice (still mid-paste, or garbage) --
       // leave whatever's already in the amount field alone.
       setInvoiceAmountSats(null);
+      setInvoiceDecoded(false);
     }
   };
 
@@ -117,10 +112,7 @@ export function SendScreen({
   // What amount actually gets sent: the invoice's own fixed amount if it
   // has one, otherwise whatever's typed into the amount field (for a
   // 0-amount invoice, where the payer chooses).
-  const manualAmountSats = (() => {
-    const parsed = Math.floor(Number(amountText.trim()));
-    return amountText.trim() !== "" && Number.isFinite(parsed) && parsed > 0 ? BigInt(parsed) : null;
-  })();
+  const manualAmountSats = parseManualAmountSats(amountText, btc);
   const effectiveAmountSats = invoiceAmountSats ?? manualAmountSats;
 
   // Real fee estimate (not a guess) from the SDK, refetched whenever the
@@ -171,10 +163,43 @@ export function SendScreen({
     };
   }, [invoice, effectiveAmountSats, invoiceAmountSats, wallet]);
 
+  const insufficientFunds = isInsufficientFunds({
+    availableSats,
+    amountSats: effectiveAmountSats,
+    feeSats: feeEstimateSats,
+    feeLoading,
+  });
+  const canPay = invoiceDecoded && effectiveAmountSats !== null && !feeLoading && !insufficientFunds;
+
+  const sendMax = async () => {
+    if (availableSats === null) return;
+    setMaxLoading(true);
+    setError(null);
+    try {
+      const fee = BigInt(
+        Math.ceil(
+          await wallet.getLightningSendFeeEstimate({
+            encodedInvoice: invoice.trim(),
+            amountSats: Number(availableSats),
+          }),
+        ),
+      );
+      if (fee >= availableSats) {
+        setError("Balance is too low to cover the network fee.");
+        return;
+      }
+      setAmountText(formatAmount(availableSats - fee));
+    } catch {
+      setError("Couldn't estimate the fee for the max amount.");
+    } finally {
+      setMaxLoading(false);
+    }
+  };
+
   const pay = async () => {
     Keyboard.dismiss();
     const trimmed = invoice.trim();
-    if (!trimmed || effectiveAmountSats === null) return;
+    if (!trimmed || !canPay || effectiveAmountSats === null) return;
     setPaying(true);
     setError(null);
     try {
@@ -182,22 +207,13 @@ export function SendScreen({
       // `withSpendContext`'s doc comment for why it doesn't try to filter
       // out any of them (a real spend silently went through with none
       // shown at all, when this tried inferring which one to skip).
-      const payment = await signer.withSpendContext(
-        { amountSats: effectiveAmountSats, destination: shortInvoice(trimmed) },
-        () =>
-          wallet.payLightningInvoice({
-            invoice: trimmed,
-            // The real estimate (plus a small margin) when we have one,
-            // rather than an arbitrary flat cap -- falls back to 100 sats
-            // if the estimate never came back.
-            maxFeeSats: feeEstimateSats !== null ? Number(feeEstimateSats) + 10 : 100,
-            preferSpark: false,
-            // Only set (and only accepted by the SDK) for a 0-amount
-            // invoice -- a fixed-amount invoice already carries its own.
-            ...(invoiceAmountSats === null ? { amountSatsToSend: Number(effectiveAmountSats) } : {}),
-          }),
-      );
-      setPayOutcome({ ok: true, message: `${effectiveAmountSats.toString()} sats sent -- status: ${payment.status}` });
+      await payInvoice(wallet, signer, {
+        invoice: trimmed,
+        invoiceAmountSats,
+        amountSats: effectiveAmountSats,
+        feeEstimateSats,
+      });
+      setPayOutcome({ ok: true, message: `${formatAmount(effectiveAmountSats)} ${unitLabel} sent` });
       onPaid();
     } catch (err) {
       setPayOutcome({ ok: false, message: String(err) });
@@ -253,7 +269,11 @@ export function SendScreen({
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <TouchableOpacity onPress={onBack} style={styles.backButton}>
         <Text style={styles.backText}>{"< Back"}</Text>
       </TouchableOpacity>
@@ -261,45 +281,77 @@ export function SendScreen({
       <Text style={styles.title}>Send</Text>
 
       <Text style={styles.label}>Lightning invoice</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="lnbc..."
-        placeholderTextColor={colors.textMuted}
-        value={invoice}
-        onChangeText={handleInvoiceChange}
-        autoCapitalize="none"
-        autoCorrect={false}
-        multiline
-      />
+      {invoiceFocused ? (
+        <TextInput
+          style={[styles.input, styles.inputExpanded]}
+          placeholder="lnbc..."
+          placeholderTextColor={colors.textMuted}
+          value={invoice}
+          onChangeText={handleInvoiceChange}
+          onBlur={() => setInvoiceFocused(false)}
+          autoFocus
+          autoCapitalize="none"
+          autoCorrect={false}
+          multiline
+        />
+      ) : (
+        <TouchableOpacity activeOpacity={0.7} onPress={() => setInvoiceFocused(true)}>
+          <Text
+            style={[styles.input, !invoice && styles.inputPlaceholder]}
+            numberOfLines={1}
+            ellipsizeMode="middle"
+          >
+            {invoice || "lnbc..."}
+          </Text>
+        </TouchableOpacity>
+      )}
+      {invoiceDecoded && <Text style={styles.validText}>Valid Lightning invoice</Text>}
+      {!invoiceDecoded && invoice !== "" && !invoiceFocused && (
+        <Text style={styles.invalidText}>Not a valid Lightning invoice</Text>
+      )}
 
       <TouchableOpacity style={styles.secondaryButtonOutline} onPress={startScan}>
         <Text style={styles.secondaryButtonOutlineText}>Scan QR code</Text>
       </TouchableOpacity>
 
-      <Text style={styles.label}>Amount (sats)</Text>
-      <TextInput
-        style={[styles.amountInput, invoiceAmountSats !== null && styles.amountInputLocked]}
-        placeholder="Enter amount"
-        placeholderTextColor={colors.textMuted}
-        value={amountText}
-        onChangeText={setAmountText}
-        keyboardType="number-pad"
-        editable={invoiceAmountSats === null}
-      />
-      {invoice.trim() !== "" && (
-        <Text style={styles.hint}>
-          {invoiceAmountSats !== null ? "Amount set by the invoice." : "This invoice doesn't set an amount -- enter one."}
-        </Text>
+      {invoiceDecoded && (
+        <>
+          <View style={styles.amountHeader}>
+            <Text style={styles.label}>Amount ({unitLabel})</Text>
+            {invoiceAmountSats === null && (
+              <TouchableOpacity onPress={sendMax} disabled={maxLoading || availableSats === null}>
+                <Text style={styles.maxText}>{maxLoading ? "..." : "Max"}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <TextInput
+            style={[styles.amountInput, invoiceAmountSats !== null && styles.amountInputLocked]}
+            placeholder="Enter amount"
+            placeholderTextColor={colors.textMuted}
+            value={amountText}
+            onChangeText={setAmountText}
+            keyboardType={btc ? "decimal-pad" : "number-pad"}
+            editable={invoiceAmountSats === null}
+          />
+          <Text style={styles.hint}>
+            {invoiceAmountSats !== null ? "Amount set by the invoice." : "This invoice doesn't set an amount -- enter one."}
+          </Text>
+          {insufficientFunds && availableSats !== null && (
+            <Text style={styles.error}>
+              Exceeds your available balance of {formatAmount(availableSats)} {unitLabel} (amount + fee).
+            </Text>
+          )}
+        </>
       )}
 
-      {invoice.trim() !== "" && effectiveAmountSats !== null && (
+      {invoiceDecoded && effectiveAmountSats !== null && (
         <View style={styles.feeBlock}>
           {feeLoading ? (
             <ActivityIndicator size="small" color={colors.textMuted} />
           ) : feeEstimateSats !== null ? (
             <>
-              <Text style={styles.feeText}>Network fee: ~{feeEstimateSats.toString()} sats</Text>
-              <Text style={styles.totalText}>Total: {(effectiveAmountSats + feeEstimateSats).toString()} sats</Text>
+              <Text style={styles.feeText}>Network fee: ~{formatAmount(feeEstimateSats)} {unitLabel}</Text>
+              <Text style={styles.totalText}>Total: {formatAmount(effectiveAmountSats + feeEstimateSats)} {unitLabel}</Text>
             </>
           ) : (
             feeError && <Text style={styles.hint}>{feeError}</Text>
@@ -308,24 +360,29 @@ export function SendScreen({
       )}
 
       <TouchableOpacity
-        style={[styles.primaryButton, (!invoice.trim() || effectiveAmountSats === null) && styles.primaryButtonDisabled]}
+        style={[styles.primaryButton, !canPay && styles.primaryButtonDisabled]}
         onPress={pay}
-        disabled={!invoice.trim() || effectiveAmountSats === null}
+        disabled={!canPay}
       >
         <Text style={styles.primaryButtonText}>Pay</Text>
       </TouchableOpacity>
 
       {error && <Text style={styles.error}>{error}</Text>}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scroll: {
     flex: 1,
+    backgroundColor: colors.background,
+  },
+  container: {
+    flexGrow: 1,
     backgroundColor: colors.background,
     padding: spacing.lg,
     paddingTop: 60,
+    paddingBottom: spacing.xl,
   },
   backButton: {
     marginBottom: spacing.lg,
@@ -354,9 +411,24 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 15,
     fontFamily: "monospace",
+    marginBottom: spacing.md,
+  },
+  validText: {
+    color: colors.success,
+    fontSize: 13,
+    marginBottom: spacing.md,
+  },
+  invalidText: {
+    color: colors.error,
+    fontSize: 13,
+    marginBottom: spacing.md,
+  },
+  inputPlaceholder: {
+    color: colors.textMuted,
+  },
+  inputExpanded: {
     minHeight: 90,
     textAlignVertical: "top",
-    marginBottom: spacing.md,
   },
   amountInput: {
     backgroundColor: colors.surface,
@@ -370,6 +442,16 @@ const styles = StyleSheet.create({
   },
   amountInputLocked: {
     color: colors.textSecondary,
+  },
+  amountHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  maxText: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: "700",
   },
   hint: {
     color: colors.textMuted,

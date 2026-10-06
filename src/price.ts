@@ -45,6 +45,20 @@ export function formatFiat(amount: number, currency: string): string {
   }
 }
 
+// The balance text only fits this many digits (plus the "."), so large
+// amounts drop decimals instead of overflowing: 9.99999999, 10.0000000, ...
+const MAX_BTC_DIGITS = 9;
+
 export function formatBtc(sats: bigint): string {
-  return satsToBtc(sats).toFixed(8);
+  const whole = sats / BigInt(SATS_PER_BTC);
+  const decimals = Math.max(0, Math.min(8, MAX_BTC_DIGITS - whole.toString().length));
+  const frac = (sats % BigInt(SATS_PER_BTC)).toString().padStart(8, "0").slice(0, decimals);
+  // Truncated, not rounded, so the display never overstates the balance.
+  return decimals > 0 ? `${whole}.${frac}` : whole.toString();
+}
+
+export function btcToSats(text: string): bigint | null {
+  const match = /^(\d*)\.?(\d{0,8})$/.exec(text.trim());
+  if (!match || (match[1] === "" && match[2] === "")) return null;
+  return BigInt(match[1] || "0") * BigInt(SATS_PER_BTC) + BigInt(match[2].padEnd(8, "0"));
 }

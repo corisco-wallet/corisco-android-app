@@ -7,7 +7,7 @@
 // firmware change giving each device its own default name makes multiple
 // nearby signers distinguishable with no app change beyond that.
 
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { colors, radii, spacing } from "../theme";
 import type { ScanResult } from "../ble-transport";
 
@@ -34,7 +34,7 @@ export function PairScanScreen({
 }) {
   return (
     <View style={styles.container}>
-      <Text style={styles.brandText}>Corisco</Text>
+      <Image source={require("../../assets/android-icon-foreground.png")} style={styles.logo} accessibilityLabel="Corisco" />
       <Text style={styles.title}>Pair a signer</Text>
 
       {scanning && (
@@ -91,12 +91,10 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingTop: 72,
   },
-  brandText: {
-    color: colors.accent,
-    fontSize: 22,
-    fontWeight: "700",
-    letterSpacing: 1,
-    textAlign: "center",
+  logo: {
+    width: 120,
+    height: 120,
+    alignSelf: "center",
     marginBottom: spacing.sm,
   },
   title: {

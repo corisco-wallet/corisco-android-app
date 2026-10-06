@@ -8,6 +8,7 @@ import { colors, radii, spacing } from "../theme";
 import { formatBtc, formatFiat, satsToFiat } from "../price";
 import type { Settings } from "../settings-store";
 import { TYPE_LABELS } from "../components/ActivityList";
+import { transferMemo } from "../transfer-memo";
 
 const HIDDEN = "••••••";
 
@@ -42,6 +43,28 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
   );
 }
 
+const SATS_PER_UNIT: Record<string, number> = {
+  SATOSHI: 1,
+  MILLISATOSHI: 0.001,
+  BITCOIN: 100_000_000,
+  MILLIBITCOIN: 100_000,
+  MICROBITCOIN: 100,
+  NANOBITCOIN: 0.1,
+};
+
+type SdkAmount = { originalValue: number; originalUnit: string };
+
+function amountToSats(amount: SdkAmount | undefined): number {
+  return (amount?.originalValue ?? 0) * (SATS_PER_UNIT[amount?.originalUnit ?? ""] ?? 0);
+}
+
+function transferFeeSats(transfer: WalletTransfer): bigint | null {
+  const request = transfer.userRequest as { fee?: SdkAmount; l1BroadcastFee?: SdkAmount } | undefined;
+  if (!request?.fee) return null;
+  const total = Math.ceil(amountToSats(request.fee) + amountToSats(request.l1BroadcastFee));
+  return total > 0 ? BigInt(total) : null;
+}
+
 export function TransactionDetailScreen({
   transfer,
   settings,
@@ -56,7 +79,10 @@ export function TransactionDetailScreen({
   const incoming = transfer.transferDirection === "INCOMING";
   const sats = BigInt(Math.trunc(transfer.totalValue));
   const amountText = settings.balanceUnit === "btc" ? formatBtc(sats) : sats.toString();
+  const feeSats = transferFeeSats(transfer);
+  const feeText = feeSats === null ? null : settings.balanceUnit === "btc" ? formatBtc(feeSats) : feeSats.toString();
   const fiatText = btcPrice !== null ? formatFiat(satsToFiat(sats, btcPrice), settings.currency) : null;
+  const memo = incoming ? transferMemo(transfer) : null;
   const label = TYPE_LABELS[transfer.type] ?? transfer.type;
   const pending = transfer.status !== "TRANSFER_STATUS_COMPLETED";
 
@@ -84,8 +110,15 @@ export function TransactionDetailScreen({
 
       <View style={styles.detailsCard}>
         <DetailRow label="Type" value={label} />
+        {memo && <DetailRow label="Note" value={memo} />}
         <DetailRow label="Date" value={formatDateTime(transfer.createdTime)} />
         <DetailRow label="Status" value={humanizeStatus(transfer.status)} />
+        {feeText !== null && (
+          <DetailRow
+            label="Fee"
+            value={`${settings.hideAmounts ? HIDDEN : feeText} ${settings.balanceUnit === "btc" ? "BTC" : "sats"}`}
+          />
+        )}
         {incoming ? (
           <DetailRow label="From" value={shortHex(transfer.senderIdentityPublicKey)} mono />
         ) : (
@@ -129,7 +162,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(74, 222, 128, 0.15)",
   },
   iconWrapOut: {
-    backgroundColor: "rgba(245, 185, 66, 0.15)",
+    backgroundColor: "rgba(255, 90, 31, 0.15)",
   },
   icon: {
     fontSize: 22,
@@ -168,7 +201,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(74, 222, 128, 0.15)",
   },
   statusBadgePending: {
-    backgroundColor: "rgba(245, 185, 66, 0.15)",
+    backgroundColor: "rgba(255, 90, 31, 0.15)",
   },
   statusText: {
     fontSize: 12,

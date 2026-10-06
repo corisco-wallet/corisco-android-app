@@ -1,7 +1,7 @@
 // Balance front and center, with Receive/Send actions below. No private
 // key material ever touches this screen (or this app).
 
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { WalletTransfer } from "@buildonspark/spark-sdk/types";
 import { colors, radii, spacing } from "../theme";
 import { ActivityList } from "../components/ActivityList";
@@ -61,7 +61,7 @@ export function HomeScreen({
     >
       <View style={styles.header}>
         <View style={styles.headerSideSpacer} />
-        <Text style={styles.brandText}>Corisco</Text>
+        <Image source={require("../../assets/android-icon-foreground.png")} style={styles.logo} accessibilityLabel="Corisco" />
         <TouchableOpacity onPress={onSettings} style={styles.settingsButton} hitSlop={8}>
           <Text style={styles.settingsIcon}>⚙</Text>
         </TouchableOpacity>
@@ -72,7 +72,7 @@ export function HomeScreen({
           <ActivityIndicator color={colors.accent} size="large" />
         ) : (
           <>
-            <Text style={styles.balanceAmount}>{settings.hideAmounts ? HIDDEN : balanceText}</Text>
+            <Text style={styles.balanceAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.4}>{settings.hideAmounts ? HIDDEN : balanceText}</Text>
             <Text style={styles.balanceUnit}>{settings.balanceUnit === "btc" ? "BTC" : "sats"}</Text>
             {fiatText && (
               <Text style={styles.fiatText}>{settings.hideAmounts ? HIDDEN : fiatText}</Text>
@@ -95,20 +95,7 @@ export function HomeScreen({
           )
         )}
 
-        {/* No more background poll -- checking for new payments is a real
-            BLE + network round-trip, not a free status check, so it only
-            happens when asked: this button, or the pull-to-refresh above. */}
-        <TouchableOpacity
-          style={[styles.refreshButton, refreshing && styles.refreshButtonDisabled]}
-          onPress={onRefresh}
-          disabled={refreshing}
-        >
-          {refreshing ? (
-            <ActivityIndicator color={colors.textSecondary} size="small" />
-          ) : (
-            <Text style={styles.refreshButtonText}>Refresh</Text>
-          )}
-        </TouchableOpacity>
+    
       </View>
 
       <View style={styles.actions}>
@@ -120,7 +107,7 @@ export function HomeScreen({
         </TouchableOpacity>
       </View>
 
-      <ActivityList transfers={transfers} loading={transfersLoading} onSelect={onSelectTransfer} />
+      <ActivityList transfers={transfers} loading={transfersLoading} settings={settings} onSelect={onSelectTransfer} />
 
       {identityPubkey && (
         <Text style={styles.pubkey} numberOfLines={1} ellipsizeMode="middle">
@@ -147,12 +134,9 @@ const styles = StyleSheet.create({
   headerSideSpacer: {
     width: 28,
   },
-  brandText: {
-    color: colors.textSecondary,
-    fontSize: 15,
-    fontWeight: "600",
-    letterSpacing: 3,
-    textTransform: "uppercase",
+  logo: {
+    width: 48,
+    height: 48,
   },
   settingsButton: {
     width: 28,
@@ -163,6 +147,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   balanceBlock: {
+    alignSelf: "stretch",
     alignItems: "center",
     justifyContent: "center",
     minHeight: 110,

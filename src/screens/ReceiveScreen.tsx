@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   StyleSheet,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -25,6 +26,10 @@ import * as Clipboard from "expo-clipboard";
 import QRCode from "react-native-qrcode-svg";
 import Svg, { Path, Polyline, Rect } from "react-native-svg";
 import type { SparkWallet as SparkWalletType } from "@buildonspark/spark-sdk";
+import { shortenInvoice } from "../invoice-format";
+import { formatBtc } from "../price";
+import { MAX_MEMO_LENGTH, createReceiveInvoice, parseAmountSats } from "../receive-invoice";
+import type { Settings } from "../settings-store";
 import { colors, radii, spacing } from "../theme";
 
 // Hand-drawn (Feather-style) icons via react-native-svg -- already a
@@ -48,9 +53,22 @@ function CheckIcon({ color, size = 20 }: { color: string; size?: number }) {
   );
 }
 
-export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onBack: () => void }) {
+export function ReceiveScreen({
+  wallet,
+  settings,
+  onBack,
+}: {
+  wallet: SparkWalletType;
+  settings: Settings;
+  onBack: () => void;
+}) {
+  const btc = settings.balanceUnit === "btc";
+  const unitLabel = btc ? "BTC" : "sats";
+  const formatAmount = (sats: number) => (btc ? formatBtc(BigInt(sats)) : String(sats));
   const [amountText, setAmountText] = useState("");
+  const [memoText, setMemoText] = useState("");
   const [invoice, setInvoice] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   // The amount the *currently displayed* invoice was actually generated
   // for -- kept separate from `amountText` so the on-screen label always
   // reflects what the QR code really encodes, not whatever's mid-typing
@@ -66,8 +84,8 @@ export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onB
   // changed again from clobbering a newer one that resolves first.
   useEffect(() => {
     let cancelled = false;
-    const amountSats = amountText.trim() === "" ? 0 : Math.floor(Number(amountText));
-    if (Number.isNaN(amountSats) || amountSats < 0) {
+    const amountSats = parseAmountSats(amountText, btc);
+    if (amountSats === null) {
       setError("Enter a valid amount, or leave it blank for any amount");
       return;
     }
@@ -78,11 +96,10 @@ export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onB
     // tap required. Only typing an amount afterward debounces.
     const delay = amountText.trim() === "" && invoice === null ? 0 : 400;
     const timer = setTimeout(() => {
-      wallet
-        .createLightningInvoice({ amountSats, memo: "Corisco" })
-        .then((request) => {
+      createReceiveInvoice(wallet, amountSats, memoText)
+        .then((encodedInvoice) => {
           if (cancelled) return;
-          setInvoice(request.invoice.encodedInvoice);
+          setInvoice(encodedInvoice);
           setInvoiceAmountSats(amountSats);
         })
         .catch((err) => {
@@ -98,7 +115,7 @@ export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onB
       clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amountText, wallet]);
+  }, [amountText, memoText, btc, wallet]);
 
   const copy = async () => {
     if (!invoice) return;
@@ -108,21 +125,34 @@ export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onB
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <TouchableOpacity onPress={onBack} style={styles.backButton}>
         <Text style={styles.backText}>{"< Back"}</Text>
       </TouchableOpacity>
 
       <Text style={styles.title}>Receive</Text>
 
-      <Text style={styles.label}>Amount (sats) -- optional</Text>
+      <Text style={styles.label}>Amount ({unitLabel})</Text>
       <TextInput
         style={styles.input}
         placeholder="Any amount"
         placeholderTextColor={colors.textMuted}
         value={amountText}
         onChangeText={setAmountText}
-        keyboardType="number-pad"
+        keyboardType={btc ? "decimal-pad" : "number-pad"}
+      />
+
+      <TextInput
+        style={styles.input}
+        placeholder="Add a note"
+        placeholderTextColor={colors.textMuted}
+        value={memoText}
+        onChangeText={setMemoText}
+        maxLength={MAX_MEMO_LENGTH}
       />
 
       {invoice && !error && (
@@ -131,12 +161,14 @@ export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onB
             <QRCode value={invoice} size={210} backgroundColor="#FFFFFF" color="#000000" />
           </View>
           <Text style={styles.amountLabel}>
-            {invoiceAmountSats && invoiceAmountSats > 0 ? `${invoiceAmountSats} sats` : "Any amount"}
+            {invoiceAmountSats && invoiceAmountSats > 0 ? `${formatAmount(invoiceAmountSats)} ${unitLabel}` : "Any amount"}
             {generating && "  (updating...)"}
           </Text>
-          <Text style={styles.invoiceText} numberOfLines={3} ellipsizeMode="middle">
-            {invoice}
-          </Text>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => setExpanded((e) => !e)}>
+            <Text style={styles.invoiceText} numberOfLines={expanded ? undefined : 1}>
+              {expanded ? invoice : shortenInvoice(invoice)}
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.copyButton} onPress={copy}>
             {copied ? <CheckIcon color={colors.success} /> : <CopyIcon color={colors.textPrimary} />}
           </TouchableOpacity>
@@ -149,14 +181,17 @@ export function ReceiveScreen({ wallet, onBack }: { wallet: SparkWalletType; onB
         </View>
       )}
       {error && <Text style={styles.error}>{error}</Text>}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scroll: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  container: {
+    flexGrow: 1,
     padding: spacing.lg,
     paddingTop: 60,
   },

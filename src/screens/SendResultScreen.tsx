@@ -39,7 +39,6 @@ export function SendResultScreen({
 }) {
   return (
     <View style={styles.container}>
-      <Text style={styles.brandText}>Corisco</Text>
       <View style={[styles.iconWrap, ok ? styles.iconWrapSuccess : styles.iconWrapError]}>
         {ok ? <CheckIcon color={colors.success} /> : <XIcon color={colors.error} />}
       </View>
