@@ -191,8 +191,8 @@ export function SendScreen({
   const insufficientFunds =
     availableSats !== null &&
     effectiveAmountSats !== null &&
-    effectiveAmountSats + (feeEstimateSats ?? 0n) > availableSats;
-  const canPay = invoiceDecoded && effectiveAmountSats !== null && !insufficientFunds;
+    effectiveAmountSats + (feeLoading ? 0n : (feeEstimateSats ?? 0n)) > availableSats;
+  const canPay = invoiceDecoded && effectiveAmountSats !== null && !feeLoading && !insufficientFunds;
 
   const sendMax = async () => {
     if (availableSats === null) return;
