@@ -38,7 +38,7 @@
   "corisco": {
     "firmware": {
       "repo": "corisco-wallet/corisco-firmware",
-      "tag": "v0.1.0",
+      "tag": "v0.1.1",
       "protocol": 1
     }
   }
