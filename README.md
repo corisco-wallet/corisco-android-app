@@ -160,7 +160,7 @@ shows up on install) and install it from the phone's file manager instead.
   12+ requires runtime Bluetooth permissions; the app requests these on
   connect, but if you denied them once, grant `Nearby devices` manually in
   the app's system settings page.
-- **"No device named 'SparkHW' found"** -- make sure the signer is powered
+- **"No Corisco-* device found"** -- make sure the signer is powered
   on and advertising (not already connected to another phone/app). If it
   was working before and suddenly isn't, try toggling the phone's
   Bluetooth off/on -- Android throttles repeated BLE scans, which produces

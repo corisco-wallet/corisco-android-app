@@ -15,6 +15,7 @@ import { PermissionsAndroid, Platform } from "react-native";
 import { BleManager, type Device, type Subscription } from "react-native-ble-plx";
 import { decodeResponse, encodeRequest, type Request, type Response } from "./postcard";
 import { REQUEST_CHARACTERISTIC_UUID, RESPONSE_CHARACTERISTIC_UUID, SERVICE_UUID } from "./ble-uuids";
+import { SIGNER_NAME_PREFIX, isSignerName } from "./signer-name";
 
 /** Android 12+ (API 31+) treats BLUETOOTH_SCAN/BLUETOOTH_CONNECT as
  * runtime-dangerous permissions -- declaring them in the manifest (which
@@ -42,7 +43,6 @@ async function ensureAndroidBlePermissions(): Promise<void> {
 export type ScanResult = { id: string; name: string };
 
 export { SERVICE_UUID };
-const DEVICE_NAME = "SparkHW";
 const REQUESTED_MTU = 247; // "commonly negotiate up to ~185-247" -- ble.rs's own doc comment
 const ATT_OVERHEAD = 3;
 const DEFAULT_ATT_MTU = 23;
@@ -126,7 +126,7 @@ export class BleSignerConnection {
     await ensureAndroidBlePermissions();
   }
 
-  /** Scans for a device named `DEVICE_NAME`, resolving once found (not yet
+  /** Scans for a device named `Corisco-<id>`, resolving once found (not yet
    * connected). Used only as `connect()`'s fallback when a saved device id
    * doesn't respond directly -- for first-time pairing, `scanForCandidates`
    * below is what drives the picker screen instead of auto-selecting the
@@ -136,7 +136,7 @@ export class BleSignerConnection {
     return new Promise<Device>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.manager.stopDeviceScan();
-        reject(new Error(`No device named "${DEVICE_NAME}" found -- is it powered on and advertising?`));
+        reject(new Error(`No ${SIGNER_NAME_PREFIX}* device found -- is it powered on and advertising?`));
       }, 15000);
       this.manager.startDeviceScan([SERVICE_UUID], null, (error, scanned) => {
         if (error) {
@@ -144,7 +144,7 @@ export class BleSignerConnection {
           reject(error);
           return;
         }
-        if (scanned && scanned.name === DEVICE_NAME) {
+        if (scanned && isSignerName(scanned.name)) {
           clearTimeout(timeout);
           this.manager.stopDeviceScan();
           resolve(scanned);
@@ -156,12 +156,8 @@ export class BleSignerConnection {
   /** Scans for nearby signers and reports each new one found, for a picker
    * screen to show during first-time pairing (rather than silently
    * auto-connecting to the first match, which is what `scanForDevice`
-   * above does for the saved-device fallback path). Matches on advertised
-   * name only for now -- every real signer currently advertises the same
-   * fixed `DEVICE_NAME`, so today this can only ever surface one distinct
-   * candidate; once the firmware gives each device its own default name,
-   * this same scan naturally starts distinguishing multiple nearby
-   * signers with no protocol change needed here.
+   * above does for the saved-device fallback path). Matches on the advertised
+   * `Corisco-<id>` name, which is unique per device.
    *
    * Calls `onDone` (with an error, if the scan itself failed) once scanning
    * stops, whether from the timeout or an explicit `stop()` call. Returns
@@ -185,7 +181,7 @@ export class BleSignerConnection {
         onDone(error);
         return;
       }
-      if (scanned && scanned.name === DEVICE_NAME && !seen.has(scanned.id)) {
+      if (scanned && isSignerName(scanned.name) && !seen.has(scanned.id)) {
         seen.add(scanned.id);
         onFound({ id: scanned.id, name: scanned.name });
       }
