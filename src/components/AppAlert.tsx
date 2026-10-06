@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { colors, radii, spacing } from "../theme";
 
@@ -18,17 +18,21 @@ export function showAlert(title: string, message?: string, buttons: AlertButton[
 }
 
 export function AlertHost() {
-  const [request, setRequest] = useState<AlertRequest | null>(null);
+  const [queue, setQueue] = useState<AlertRequest[]>([]);
+  const request = queue[0] ?? null;
+  const lastRequest = useRef(request);
+  if (request) lastRequest.current = request;
+  const shown = request ?? lastRequest.current;
 
   useEffect(() => {
-    present = setRequest;
+    present = (next) => setQueue((q) => [...q, next]);
     return () => {
       present = null;
     };
   }, []);
 
   const dismiss = (button?: AlertButton) => {
-    setRequest(null);
+    setQueue((q) => q.slice(1));
     button?.onPress?.();
   };
 
@@ -38,12 +42,12 @@ export function AlertHost() {
     <Modal transparent visible={request !== null} animationType="fade" onRequestClose={() => dismiss(cancelButton)}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          <Text style={styles.title}>{request?.title}</Text>
-          {request?.message ? <Text style={styles.message}>{request.message}</Text> : null}
+          <Text style={styles.title}>{shown?.title}</Text>
+          {shown?.message ? <Text style={styles.message}>{shown.message}</Text> : null}
           <View style={styles.buttons}>
-            {request?.buttons.map((button) => (
+            {shown?.buttons.map((button, index) => (
               <TouchableOpacity
-                key={button.text}
+                key={`${index}-${button.text}`}
                 style={[styles.button, button.style === "destructive" && styles.buttonDestructive]}
                 onPress={() => dismiss(button)}
               >
