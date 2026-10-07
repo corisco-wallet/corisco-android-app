@@ -240,7 +240,7 @@ export function SendScreen({
   // wallet-load indicator).
   if (paying) {
     const label = signProgress
-      ? `Sending payment...\nConfirm on your device: ${signProgress.confirmed} of ${signProgress.total} signatures`
+      ? `Sending payment...\nConfirm on your device: ${signProgress.confirmed} of ${signProgress.total ?? "?"} signatures`
       : "Sending payment...";
     return <SendingScreen label={label} />;
   }

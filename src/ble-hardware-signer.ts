@@ -61,14 +61,13 @@ function sharesFromWire(shares: ShareWire[]): VerifiableSecretShare[] {
   return shares.map((s) => ({ threshold: s.threshold, index: s.index, share: s.share, proofs: s.proofs }));
 }
 
-/** `total` is an upper bound: the SDK fetches three commitments per leaf up front, but skips signing the
- * direct refunds for leaves that have none. */
-export type SignProgress = { confirmed: number; total: number };
+/** `total` is null until the SDK says how many signatures the payment's final transfer needs. */
+export type SignProgress = { confirmed: number; total: number | null };
 
 export class BleHardwareSigner extends DefaultSparkSigner {
   onSignProgress?: (progress: SignProgress | null) => void;
-  private commitmentsInBurst = 0;
-  private burst: { total: number; confirmed: number } | null = null;
+  private confirmedInSpend = 0;
+  private expectedInSpend: number | null = null;
 
   // Keyed by object identity, same as HardwareBridgeSigner -- the SDK
   // hands back the exact same SigningCommitment object in signFrost's
@@ -135,8 +134,8 @@ export class BleHardwareSigner extends DefaultSparkSigner {
   ): Promise<T> {
     const previous = this.spendContext;
     if (!previous) {
-      this.burst = null;
-      this.commitmentsInBurst = 0;
+      this.confirmedInSpend = 0;
+      this.expectedInSpend = null;
     }
     this.spendContext = { amountSats, destination };
     try {
@@ -144,21 +143,27 @@ export class BleHardwareSigner extends DefaultSparkSigner {
     } finally {
       this.spendContext = previous;
       if (!previous) {
-        this.burst = null;
-        this.commitmentsInBurst = 0;
+        this.expectedInSpend = null;
         this.onSignProgress?.(null);
       }
     }
   }
 
+  /** The SDK is about to ask for `count` more device signatures; shown as the payment's remaining taps. */
+  expectSignatures(count: number): void {
+    this.expectedInSpend = this.confirmedInSpend + count;
+    this.reportProgress();
+  }
+
+  private reportProgress(): void {
+    const total = this.expectedInSpend === null ? null : Math.max(this.expectedInSpend, this.confirmedInSpend);
+    this.onSignProgress?.({ confirmed: this.confirmedInSpend, total });
+  }
+
   override async getRandomSigningCommitment(): Promise<SigningCommitmentWithOptionalNonce> {
     const resp = await this.conn.request({ type: "Commit" });
     if (resp.type !== "Commit") throw new Error(`unexpected response to Commit: ${resp.type}`);
-    if (this.burst) {
-      this.burst = null;
-      this.commitmentsInBurst = 0;
-    }
-    this.commitmentsInBurst++;
+
     const commitment: SigningCommitment = { hiding: resp.hiding, binding: resp.binding };
     this.pendingCommitmentIds.set(commitment, resp.commitmentId);
     return { commitment };
@@ -193,10 +198,6 @@ export class BleHardwareSigner extends DefaultSparkSigner {
     // filter which one is "the real spend" the way claiming's
     // `withoutSpendConfirmation` safely can.
     const requiresConfirmation = this.spendConfirmationSuppressedDepth === 0;
-    if (requiresConfirmation && !this.burst) {
-      this.burst = { total: this.commitmentsInBurst, confirmed: 0 };
-      this.onSignProgress?.({ confirmed: 0, total: this.burst.total });
-    }
 
     const resp = await this.conn.request({
       type: "Sign",
@@ -213,9 +214,9 @@ export class BleHardwareSigner extends DefaultSparkSigner {
       destination: requiresConfirmation ? this.spendContext?.destination : undefined,
     });
     if (resp.type !== "Sign") throw new Error(`unexpected response to Sign: ${resp.type}`);
-    if (requiresConfirmation && this.burst) {
-      this.burst.confirmed++;
-      this.onSignProgress?.({ confirmed: this.burst.confirmed, total: Math.max(this.burst.total, this.burst.confirmed) });
+    if (requiresConfirmation && this.spendContext) {
+      this.confirmedInSpend++;
+      this.reportProgress();
     }
     return resp.signatureShare;
   }

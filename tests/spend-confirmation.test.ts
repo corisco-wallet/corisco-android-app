@@ -96,15 +96,15 @@ describe("spend confirmation wrappers", () => {
 });
 
 describe("sign progress", () => {
-  it("reports confirmed signatures out of the commitments fetched up front, then clears", async () => {
+  it("counts confirmed signatures against the announced total, then clears", async () => {
     const { signer } = setup();
-    const seen: Array<{ confirmed: number; total: number } | null> = [];
+    const seen: Array<{ confirmed: number; total: number | null } | null> = [];
     signer.onSignProgress = (p) => seen.push(p);
 
     await signer.withSpendContext({ amountSats: 1n, destination: "d" }, async () => {
-      const commitments = [];
-      for (let i = 0; i < 3; i++) commitments.push((await signer.getRandomSigningCommitment()).commitment);
-      for (const commitment of commitments) {
+      signer.expectSignatures(2);
+      for (let i = 0; i < 2; i++) {
+        const { commitment } = await signer.getRandomSigningCommitment();
         await signer.signFrost({
           message: new Uint8Array(32),
           keyDerivation: { type: KeyDerivationType.LEAF, path: "leaf-1" },
@@ -118,10 +118,9 @@ describe("sign progress", () => {
     });
 
     expect(seen).toEqual([
-      { confirmed: 0, total: 3 },
-      { confirmed: 1, total: 3 },
-      { confirmed: 2, total: 3 },
-      { confirmed: 3, total: 3 },
+      { confirmed: 0, total: 2 },
+      { confirmed: 1, total: 2 },
+      { confirmed: 2, total: 2 },
       null,
     ]);
   });
