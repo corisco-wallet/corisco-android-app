@@ -94,3 +94,35 @@ describe("spend confirmation wrappers", () => {
     expect((await ctx.sign()).requiresConfirmation).toBe(true);
   });
 });
+
+describe("sign progress", () => {
+  it("reports confirmed signatures out of the commitments fetched up front, then clears", async () => {
+    const { signer } = setup();
+    const seen: Array<{ confirmed: number; total: number } | null> = [];
+    signer.onSignProgress = (p) => seen.push(p);
+
+    await signer.withSpendContext({ amountSats: 1n, destination: "d" }, async () => {
+      const commitments = [];
+      for (let i = 0; i < 3; i++) commitments.push((await signer.getRandomSigningCommitment()).commitment);
+      for (const commitment of commitments) {
+        await signer.signFrost({
+          message: new Uint8Array(32),
+          keyDerivation: { type: KeyDerivationType.LEAF, path: "leaf-1" },
+          publicKey: new Uint8Array(33),
+          verifyingKey: new Uint8Array(33),
+          selfCommitment: { commitment },
+          statechainCommitments: {},
+          adaptorPubKey: new Uint8Array(0),
+        } as unknown as SignFrostParams);
+      }
+    });
+
+    expect(seen).toEqual([
+      { confirmed: 0, total: 3 },
+      { confirmed: 1, total: 3 },
+      { confirmed: 2, total: 3 },
+      { confirmed: 3, total: 3 },
+      null,
+    ]);
+  });
+});
