@@ -63,14 +63,44 @@ export function buildPayParams({
   };
 }
 
+type LightningTransferPrep = { leaf: { directTx: Uint8Array } }[];
+type TransferServiceLike = {
+  prepareTransferForLightning?: (leaves: LightningTransferPrep, ...rest: unknown[]) => Promise<unknown>;
+};
+
+/** Per leaf the SDK signs the CPFP and direct-from-CPFP refunds, plus the direct refund when the leaf has a direct tx. */
+export function lightningSignatureCount(leaves: LightningTransferPrep): number {
+  return leaves.reduce((n, { leaf }) => n + (leaf.directTx.length > 0 ? 3 : 2), 0);
+}
+
+/** Reports the signature count to the signer when the SDK hands over the leaves it chose. Reaches into an SDK-private
+ * service, so it silently does nothing if that shape changes. Returns an undo. */
+function announceSignatureCount(wallet: SparkWallet, signer: BleHardwareSigner): () => void {
+  const service = (wallet as unknown as { transferService?: TransferServiceLike }).transferService;
+  const original = service?.prepareTransferForLightning;
+  if (!service || typeof original !== "function") return () => {};
+  service.prepareTransferForLightning = (leaves, ...rest) => {
+    signer.expectSignatures(lightningSignatureCount(leaves));
+    return original.call(service, leaves, ...rest);
+  };
+  return () => {
+    service.prepareTransferForLightning = original;
+  };
+}
+
 /** Every Sign the payment triggers is confirmed on the device, so this must never use withoutSpendConfirmation. */
-export function payInvoice(
+export async function payInvoice(
   wallet: SparkWallet,
   signer: BleHardwareSigner,
   params: Parameters<typeof buildPayParams>[0],
 ) {
-  return signer.withSpendContext(
-    { amountSats: params.amountSats, destination: shortInvoice(params.invoice) },
-    () => wallet.payLightningInvoice(buildPayParams(params)),
-  );
+  const restore = announceSignatureCount(wallet, signer);
+  try {
+    return await signer.withSpendContext(
+      { amountSats: params.amountSats, destination: shortInvoice(params.invoice) },
+      () => wallet.payLightningInvoice(buildPayParams(params)),
+    );
+  } finally {
+    restore();
+  }
 }

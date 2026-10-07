@@ -47,7 +47,7 @@ export function useWalletSession({
   const [syncLabel, setSyncLabel] = useState("");
 
   const maintenance = useWalletMaintenance(wallet, signerRef, showLastXTransactions);
-  const { claimPending, optimizePending, refreshBalance, refreshTransfers, reset: resetMaintenance } = maintenance;
+  const { claimPending, refreshBalance, refreshTransfers, reset: resetMaintenance } = maintenance;
 
   const connectAndInit = useCallback(
     async (targetDeviceId: string, expected?: SavedDevice) => {
@@ -84,7 +84,12 @@ export function useWalletSession({
         setConnectStatus("Starting wallet...");
         const { wallet: w } = await SparkWallet.initialize({
           signer,
-          options: { network: SPARK_NETWORK, signerWithPreExistingKeys: true },
+          options: {
+            network: SPARK_NETWORK,
+            signerWithPreExistingKeys: true,
+            // Optimization hands leaves to the SSP, which must not happen without a device tap.
+            optimizationOptions: { auto: false },
+          },
         });
         setWallet(w);
         walletRef.current = w;
@@ -125,8 +130,6 @@ export function useWalletSession({
         await claimPending(w, signer);
         setSyncProgress(60);
 
-        setSyncLabel("Optimizing wallet...");
-        await optimizePending(w, signer);
         setSyncProgress(80);
 
         setSyncLabel("Loading balance and activity...");
@@ -157,7 +160,6 @@ export function useWalletSession({
       refreshBalance,
       refreshTransfers,
       claimPending,
-      optimizePending,
     ],
   );
 

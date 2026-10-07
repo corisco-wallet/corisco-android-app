@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import type { SparkWallet as SparkWalletType } from "@buildonspark/spark-sdk";
-import type { BleHardwareSigner } from "../ble-hardware-signer";
+import type { BleHardwareSigner, SignProgress } from "../ble-hardware-signer";
 import { colors, radii, spacing } from "../theme";
 import { formatBtc } from "../price";
 import {
@@ -61,6 +61,7 @@ export function SendScreen({
   const [invoiceDecoded, setInvoiceDecoded] = useState(false);
   const [maxLoading, setMaxLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [signProgress, setSignProgress] = useState<SignProgress | null>(null);
   const [paying, setPaying] = useState(false);
   // Full-screen result shown once `pay()` finishes, success or failure --
   // distinct from `error` below, which is only ever a pre-flight/form
@@ -202,6 +203,7 @@ export function SendScreen({
     if (!trimmed || !canPay || effectiveAmountSats === null) return;
     setPaying(true);
     setError(null);
+    signer.onSignProgress = setSignProgress;
     try {
       // Every Sign this triggers requires on-device confirmation -- see
       // `withSpendContext`'s doc comment for why it doesn't try to filter
@@ -218,6 +220,8 @@ export function SendScreen({
     } catch (err) {
       setPayOutcome({ ok: false, message: String(err) });
     } finally {
+      signer.onSignProgress = undefined;
+      setSignProgress(null);
       setPaying(false);
     }
   };
@@ -235,7 +239,10 @@ export function SendScreen({
   // more deliberate status screen (same reasoning as SyncingScreen's
   // wallet-load indicator).
   if (paying) {
-    return <SendingScreen label="Sending payment..." />;
+    const label = signProgress
+      ? `Sending payment...\nConfirm on your device: ${signProgress.confirmed} of ${signProgress.total ?? "?"} signatures`
+      : "Sending payment...";
+    return <SendingScreen label={label} />;
   }
 
   if (payOutcome) {

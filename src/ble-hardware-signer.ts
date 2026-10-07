@@ -61,7 +61,14 @@ function sharesFromWire(shares: ShareWire[]): VerifiableSecretShare[] {
   return shares.map((s) => ({ threshold: s.threshold, index: s.index, share: s.share, proofs: s.proofs }));
 }
 
+/** `total` is null until the SDK says how many signatures the payment's final transfer needs. */
+export type SignProgress = { confirmed: number; total: number | null };
+
 export class BleHardwareSigner extends DefaultSparkSigner {
+  onSignProgress?: (progress: SignProgress | null) => void;
+  private confirmedInSpend = 0;
+  private expectedInSpend: number | null = null;
+
   // Keyed by object identity, same as HardwareBridgeSigner -- the SDK
   // hands back the exact same SigningCommitment object in signFrost's
   // selfCommitment later.
@@ -126,17 +133,37 @@ export class BleHardwareSigner extends DefaultSparkSigner {
     fn: () => Promise<T>,
   ): Promise<T> {
     const previous = this.spendContext;
+    if (!previous) {
+      this.confirmedInSpend = 0;
+      this.expectedInSpend = null;
+    }
     this.spendContext = { amountSats, destination };
     try {
       return await fn();
     } finally {
       this.spendContext = previous;
+      if (!previous) {
+        this.expectedInSpend = null;
+        this.onSignProgress?.(null);
+      }
     }
+  }
+
+  /** The SDK is about to ask for `count` more device signatures; shown as the payment's remaining taps. */
+  expectSignatures(count: number): void {
+    this.expectedInSpend = this.confirmedInSpend + count;
+    this.reportProgress();
+  }
+
+  private reportProgress(): void {
+    const total = this.expectedInSpend === null ? null : Math.max(this.expectedInSpend, this.confirmedInSpend);
+    this.onSignProgress?.({ confirmed: this.confirmedInSpend, total });
   }
 
   override async getRandomSigningCommitment(): Promise<SigningCommitmentWithOptionalNonce> {
     const resp = await this.conn.request({ type: "Commit" });
     if (resp.type !== "Commit") throw new Error(`unexpected response to Commit: ${resp.type}`);
+
     const commitment: SigningCommitment = { hiding: resp.hiding, binding: resp.binding };
     this.pendingCommitmentIds.set(commitment, resp.commitmentId);
     return { commitment };
@@ -187,6 +214,10 @@ export class BleHardwareSigner extends DefaultSparkSigner {
       destination: requiresConfirmation ? this.spendContext?.destination : undefined,
     });
     if (resp.type !== "Sign") throw new Error(`unexpected response to Sign: ${resp.type}`);
+    if (requiresConfirmation && this.spendContext) {
+      this.confirmedInSpend++;
+      this.reportProgress();
+    }
     return resp.signatureShare;
   }
 

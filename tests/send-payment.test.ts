@@ -175,3 +175,36 @@ describe("payInvoice", () => {
     ).rejects.toThrow("no route");
   });
 });
+
+describe("payInvoice signature announcement", () => {
+  it("announces 3 signatures for a leaf with a direct tx and 2 without, and restores the SDK method", async () => {
+    const original = vi.fn(async (_leaves: unknown) => "prepared");
+    const transferService = { prepareTransferForLightning: original };
+    const wallet = {
+      transferService,
+      payLightningInvoice: vi.fn(async () => {
+        await transferService.prepareTransferForLightning([
+          { leaf: { directTx: new Uint8Array(5) } },
+          { leaf: { directTx: new Uint8Array(0) } },
+        ]);
+        return "paid";
+      }),
+    };
+    const expectSignatures = vi.fn();
+    const signer = {
+      expectSignatures,
+      withSpendContext: (_ctx: unknown, fn: () => Promise<unknown>) => fn(),
+    };
+
+    await payInvoice(wallet as unknown as SparkWallet, signer as unknown as BleHardwareSigner, {
+      invoice: INVOICE_250K_SATS,
+      invoiceAmountSats: 250_000n,
+      amountSats: 250_000n,
+      feeEstimateSats: null,
+    });
+
+    expect(expectSignatures).toHaveBeenCalledWith(5);
+    expect(original).toHaveBeenCalledTimes(1);
+    expect(transferService.prepareTransferForLightning).toBe(original);
+  });
+});
