@@ -36,20 +36,6 @@ export function useWalletMaintenance(
     }
   }, []);
 
-  // Consolidates leaves so payments need fewer BLE signing round-trips. Called ourselves because the
-  // SDK's built-in auto-optimize can't be routed through `withoutSpendConfirmation`.
-  const optimizePending = useCallback(async (w: SparkWalletType, signer: BleHardwareSigner) => {
-    try {
-      await signer.withoutSpendConfirmation(async () => {
-        for await (const _step of w.optimizeLeaves()) {
-        }
-      });
-    } catch (optimizeErr) {
-      // Best-effort housekeeping, so not surfaced like a failed claim.
-      console.warn("optimizeLeaves failed:", optimizeErr);
-    }
-  }, []);
-
   const refreshBalance = useCallback(async (w: SparkWalletType) => {
     const balance = await w.getBalance();
     setAvailableSats(balance.satsBalance.available);
@@ -99,16 +85,6 @@ export function useWalletMaintenance(
     };
   }, [wallet, refreshTransfers]);
 
-  // Slower than claiming: consolidation costs real BLE signing round-trips.
-  useEffect(() => {
-    if (!wallet || !signerRef.current) return;
-    const signer = signerRef.current;
-    const interval = setInterval(() => {
-      void optimizePending(wallet, signer);
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, [wallet, signerRef, optimizePending]);
-
   const reset = useCallback(() => {
     setAvailableSats(null);
     setIncomingSats(null);
@@ -124,7 +100,6 @@ export function useWalletMaintenance(
     transfersLoading,
     refreshing,
     claimPending,
-    optimizePending,
     refreshBalance,
     refreshTransfers,
     onRefresh,
