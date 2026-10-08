@@ -22,7 +22,8 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 // complete" (there's no percent label at all, unlike SyncingScreen).
 const ARC_FRACTION = 0.3;
 
-export function SendingScreen({ label }: { label: string }) {
+/** `progress` (0 to 1) shows a determinate ring with the percentage in the middle; without it the ring just spins. */
+export function SendingScreen({ label, progress }: { label: string; progress?: number | null }) {
   const rotation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -39,6 +40,33 @@ export function SendingScreen({ label }: { label: string }) {
   }, [rotation]);
 
   const spin = rotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
+
+  if (progress != null) {
+    const fraction = Math.min(1, Math.max(0, progress));
+    return (
+      <View style={styles.container}>
+        <View style={styles.ring}>
+          <Svg width={SIZE} height={SIZE} style={styles.determinate}>
+            <Circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} stroke={colors.border} strokeWidth={STROKE_WIDTH} fill="none" />
+            <Circle
+              cx={SIZE / 2}
+              cy={SIZE / 2}
+              r={RADIUS}
+              stroke={colors.accent}
+              strokeWidth={STROKE_WIDTH}
+              fill="none"
+              strokeDasharray={`${CIRCUMFERENCE * fraction}, ${CIRCUMFERENCE}`}
+              strokeLinecap="round"
+            />
+          </Svg>
+          <View style={styles.percentWrap}>
+            <Text style={styles.percent}>{Math.round(fraction * 100)}%</Text>
+          </View>
+        </View>
+        <Text style={styles.label}>{label}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -80,6 +108,19 @@ const styles = StyleSheet.create({
   ring: {
     width: SIZE,
     height: SIZE,
+  },
+  determinate: {
+    transform: [{ rotate: "-90deg" }],
+  },
+  percentWrap: {
+    ...StyleSheet.absoluteFill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  percent: {
+    color: colors.textPrimary,
+    fontSize: 20,
+    fontWeight: "700",
   },
   label: {
     marginTop: spacing.lg,

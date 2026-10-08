@@ -6,8 +6,10 @@ import {
   buildPayParams,
   decodeInvoiceAmountSats,
   isInsufficientFunds,
+  nextProgressRatio,
   parseManualAmountSats,
   payInvoice,
+  progressLabel,
   shortInvoice,
 } from "../src/send-payment";
 
@@ -177,24 +179,28 @@ describe("payInvoice", () => {
 });
 
 describe("payInvoice signature announcement", () => {
-  it("announces 3 signatures for a leaf with a direct tx and 2 without, and restores the SDK method", async () => {
-    const original = vi.fn(async (_leaves: unknown) => "prepared");
-    const transferService = { prepareTransferForLightning: original };
+  const leaf = (directTxBytes: number) => ({ leaf: { directTx: new Uint8Array(directTxBytes) } });
+
+  it("announces each phase of the payment and restores the SDK methods", async () => {
+    const prepare = vi.fn(async (_leaves: unknown) => "prepared");
+    const swap = vi.fn(async (_leaves: unknown) => "swapped");
+    const claim = vi.fn(async (_transfer: unknown, _leafKeys: unknown) => "claimed");
+    const transferService = {
+      prepareTransferForLightning: prepare,
+      sendSwapTransfer: swap,
+      claimTransferSignRefunds: claim,
+    };
     const wallet = {
       transferService,
       payLightningInvoice: vi.fn(async () => {
-        await transferService.prepareTransferForLightning([
-          { leaf: { directTx: new Uint8Array(5) } },
-          { leaf: { directTx: new Uint8Array(0) } },
-        ]);
+        await transferService.sendSwapTransfer([leaf(5), leaf(0)]);
+        await transferService.claimTransferSignRefunds({}, [leaf(5)]);
+        await transferService.prepareTransferForLightning([leaf(5)]);
         return "paid";
       }),
     };
     const expectSignatures = vi.fn();
-    const signer = {
-      expectSignatures,
-      withSpendContext: (_ctx: unknown, fn: () => Promise<unknown>) => fn(),
-    };
+    const signer = { expectSignatures, withSpendContext: (_ctx: unknown, fn: () => Promise<unknown>) => fn() };
 
     await payInvoice(wallet as unknown as SparkWallet, signer as unknown as BleHardwareSigner, {
       invoice: INVOICE_250K_SATS,
@@ -203,8 +209,32 @@ describe("payInvoice signature announcement", () => {
       feeEstimateSats: null,
     });
 
-    expect(expectSignatures).toHaveBeenCalledWith(5);
-    expect(original).toHaveBeenCalledTimes(1);
-    expect(transferService.prepareTransferForLightning).toBe(original);
+    expect(expectSignatures.mock.calls).toEqual([[5], [3], [3]]);
+    expect(transferService.prepareTransferForLightning).toBe(prepare);
+    expect(transferService.sendSwapTransfer).toBe(swap);
+    expect(transferService.claimTransferSignRefunds).toBe(claim);
+  });
+});
+
+describe("send progress display", () => {
+  it("labels the signature being waited on", () => {
+    expect(progressLabel(null)).toBe("Sending payment...");
+    expect(progressLabel({ confirmed: 0, total: 4 })).toBe("Signature 1 of 4");
+    expect(progressLabel({ confirmed: 3, total: 4 })).toBe("Signature 4 of 4");
+    expect(progressLabel({ confirmed: 4, total: 4 })).toBe("Signature 4 of 4");
+    expect(progressLabel({ confirmed: 2, total: null })).toBe("Signature 3");
+  });
+
+  it("moves 25% per signature for a four-signature payment and never goes backwards", () => {
+    let ratio: number | null = null;
+    const seen: Array<number | null> = [];
+    for (const confirmed of [0, 1, 2, 3, 4]) {
+      ratio = nextProgressRatio(ratio, { confirmed, total: 4 });
+      seen.push(ratio);
+    }
+    expect(seen).toEqual([0, 0.25, 0.5, 0.75, 1]);
+    expect(nextProgressRatio(1, { confirmed: 4, total: 9 })).toBe(1);
+    expect(nextProgressRatio(0.5, { confirmed: 5, total: null })).toBe(0.5);
+    expect(nextProgressRatio(0.5, null)).toBe(0.5);
   });
 });
