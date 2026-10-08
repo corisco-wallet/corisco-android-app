@@ -30,7 +30,8 @@ import {
   type VerifiableSecretShare,
 } from "@buildonspark/spark-sdk";
 import { BleSignerConnection } from "./ble-transport";
-import type { KeyDerivationRefWire, ShareWire, StatechainCommitmentWire } from "./postcard";
+import { deviceConfirm } from "./device-confirm";
+import type { KeyDerivationRefWire, Request, ShareWire, StatechainCommitmentWire } from "./postcard";
 
 function hexToBytes(hex: string): Uint8Array {
   const bytes = new Uint8Array(hex.length / 2);
@@ -234,8 +235,17 @@ export class BleHardwareSigner extends DefaultSparkSigner {
   }
 
   override async signSchnorrWithIdentityKey(message: Uint8Array): Promise<Uint8Array> {
-    const resp = await this.conn.request({ type: "SignSchnorrIdentity", message });
+    return this.confirmIdentitySignature({ type: "SignSchnorrIdentity", message });
+  }
+
+  /** The device asks for a tap on every identity signature: the digest could be a login or a transfer. */
+  private async confirmIdentitySignature(req: Request): Promise<Uint8Array> {
+    const resp = await deviceConfirm.during(() => this.conn.request(req));
     if (resp.type !== "Signature") throw new Error(`unexpected response: ${resp.type}`);
+    if (this.spendContext) {
+      this.confirmedInSpend++;
+      this.reportProgress();
+    }
     return resp.signature;
   }
 
@@ -259,9 +269,7 @@ export class BleHardwareSigner extends DefaultSparkSigner {
   }
 
   override async signMessageWithIdentityKey(message: Uint8Array, compact?: boolean): Promise<Uint8Array> {
-    const resp = await this.conn.request({ type: "SignEcdsaIdentity", message, compact: compact ?? false });
-    if (resp.type !== "Signature") throw new Error(`unexpected response: ${resp.type}`);
-    return resp.signature;
+    return this.confirmIdentitySignature({ type: "SignEcdsaIdentity", message, compact: compact ?? false });
   }
 
   override async subtractAndSplitSecretWithProofsGivenDerivations({

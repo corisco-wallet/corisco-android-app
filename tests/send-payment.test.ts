@@ -177,7 +177,7 @@ describe("payInvoice", () => {
 });
 
 describe("payInvoice signature announcement", () => {
-  it("announces 3 signatures for a leaf with a direct tx and 2 without, and restores the SDK method", async () => {
+  it("announces 3 signatures for a leaf with a direct tx, 2 without, and 1 for the transfer package, and restores the SDK method", async () => {
     const original = vi.fn(async (_leaves: unknown) => "prepared");
     const transferService = { prepareTransferForLightning: original };
     const wallet = {
@@ -203,7 +203,7 @@ describe("payInvoice signature announcement", () => {
       feeEstimateSats: null,
     });
 
-    expect(expectSignatures).toHaveBeenCalledWith(5);
+    expect(expectSignatures).toHaveBeenCalledWith(6);
     expect(original).toHaveBeenCalledTimes(1);
     expect(transferService.prepareTransferForLightning).toBe(original);
   });

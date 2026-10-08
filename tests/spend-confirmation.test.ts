@@ -125,3 +125,31 @@ describe("sign progress", () => {
     ]);
   });
 });
+
+describe("identity signatures", () => {
+  it("flags a pending device confirmation while the request is in flight and counts it in a spend", async () => {
+    const { deviceConfirm } = await import("../src/device-confirm");
+    let release!: () => void;
+    const conn = {
+      request: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve({ type: "Signature", signature: new Uint8Array(64) });
+          }),
+      ),
+    };
+    const signer = new BleHardwareSigner(conn as never);
+    const seen: Array<{ confirmed: number; total: number | null } | null> = [];
+    signer.onSignProgress = (p) => seen.push(p);
+
+    await signer.withSpendContext({ amountSats: 1n, destination: "d" }, async () => {
+      const signing = signer.signMessageWithIdentityKey(new Uint8Array(32));
+      expect(deviceConfirm.isPending()).toBe(true);
+      release();
+      await signing;
+    });
+
+    expect(deviceConfirm.isPending()).toBe(false);
+    expect(seen[0]).toEqual({ confirmed: 1, total: null });
+  });
+});

@@ -68,9 +68,10 @@ type TransferServiceLike = {
   prepareTransferForLightning?: (leaves: LightningTransferPrep, ...rest: unknown[]) => Promise<unknown>;
 };
 
-/** Per leaf the SDK signs the CPFP and direct-from-CPFP refunds, plus the direct refund when the leaf has a direct tx. */
+/** Per leaf the SDK signs the CPFP and direct-from-CPFP refunds, plus the direct refund when the leaf has a direct tx,
+ * then the device signs the transfer package itself with the identity key. */
 export function lightningSignatureCount(leaves: LightningTransferPrep): number {
-  return leaves.reduce((n, { leaf }) => n + (leaf.directTx.length > 0 ? 3 : 2), 0);
+  return leaves.reduce((n, { leaf }) => n + (leaf.directTx.length > 0 ? 3 : 2), 1);
 }
 
 /** Reports the signature count to the signer when the SDK hands over the leaves it chose. Reaches into an SDK-private
