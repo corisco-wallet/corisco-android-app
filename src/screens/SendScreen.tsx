@@ -20,8 +20,10 @@ import { formatBtc } from "../price";
 import {
   decodeInvoiceAmountSats,
   isInsufficientFunds,
+  nextProgressRatio,
   parseManualAmountSats,
   payInvoice,
+  progressLabel,
 } from "../send-payment";
 import type { Settings } from "../settings-store";
 import { SendingScreen } from "./SendingScreen";
@@ -62,6 +64,7 @@ export function SendScreen({
   const [maxLoading, setMaxLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [signProgress, setSignProgress] = useState<SignProgress | null>(null);
+  const [progressRatio, setProgressRatio] = useState<number | null>(null);
   const [paying, setPaying] = useState(false);
   // Full-screen result shown once `pay()` finishes, success or failure --
   // distinct from `error` below, which is only ever a pre-flight/form
@@ -203,7 +206,11 @@ export function SendScreen({
     if (!trimmed || !canPay || effectiveAmountSats === null) return;
     setPaying(true);
     setError(null);
-    signer.onSignProgress = setSignProgress;
+    setProgressRatio(null);
+    signer.onSignProgress = (progress) => {
+      setSignProgress(progress);
+      setProgressRatio((previous) => nextProgressRatio(previous, progress));
+    };
     try {
       // Every Sign this triggers requires on-device confirmation -- see
       // `withSpendContext`'s doc comment for why it doesn't try to filter
@@ -222,6 +229,7 @@ export function SendScreen({
     } finally {
       signer.onSignProgress = undefined;
       setSignProgress(null);
+      setProgressRatio(null);
       setPaying(false);
     }
   };
@@ -239,10 +247,7 @@ export function SendScreen({
   // more deliberate status screen (same reasoning as SyncingScreen's
   // wallet-load indicator).
   if (paying) {
-    const label = signProgress
-      ? `Sending payment...\nConfirm on your device: ${signProgress.confirmed} of ${signProgress.total ?? "?"} signatures`
-      : "Sending payment...";
-    return <SendingScreen label={label} />;
+    return <SendingScreen label={progressLabel(signProgress)} progress={progressRatio} />;
   }
 
   if (payOutcome) {

@@ -2,6 +2,7 @@ import { decode as decodeBolt11 } from "light-bolt11-decoder";
 import type { SparkWallet } from "@buildonspark/spark-sdk";
 import type { BleHardwareSigner } from "./ble-hardware-signer";
 import { btcToSats } from "./price";
+import type { SignProgress } from "./ble-hardware-signer";
 
 const FEE_MARGIN_SATS = 10;
 const FALLBACK_MAX_FEE_SATS = 100;
@@ -63,29 +64,38 @@ export function buildPayParams({
   };
 }
 
-type LightningTransferPrep = { leaf: { directTx: Uint8Array } }[];
-type TransferServiceLike = {
-  prepareTransferForLightning?: (leaves: LightningTransferPrep, ...rest: unknown[]) => Promise<unknown>;
-};
+type LeafPrep = { leaf: { directTx: Uint8Array } }[];
+type TransferServiceLike = Record<string, ((...args: never[]) => unknown) | undefined>;
 
 /** Per leaf the SDK signs the CPFP and direct-from-CPFP refunds, plus the direct refund when the leaf has a direct tx. */
-export function lightningSignatureCount(leaves: LightningTransferPrep): number {
+export function leafSignatureCount(leaves: LeafPrep): number {
   return leaves.reduce((n, { leaf }) => n + (leaf.directTx.length > 0 ? 3 : 2), 0);
 }
 
-/** Reports the signature count to the signer when the SDK hands over the leaves it chose. Reaches into an SDK-private
- * service, so it silently does nothing if that shape changes. Returns an undo. */
-function announceSignatureCount(wallet: SparkWallet, signer: BleHardwareSigner): () => void {
+/** A payment signs in phases (an optional leaf swap with the service provider, a claim of the swapped leaves, then the
+ * payment transfer); each phase reports its count when the SDK starts it. Reaches into an SDK-private service, so a
+ * method that is missing or renamed is skipped and the total just stays unknown. Returns an undo. */
+function announceSignatureCounts(wallet: SparkWallet, signer: BleHardwareSigner): () => void {
   const service = (wallet as unknown as { transferService?: TransferServiceLike }).transferService;
-  const original = service?.prepareTransferForLightning;
-  if (!service || typeof original !== "function") return () => {};
-  service.prepareTransferForLightning = (leaves, ...rest) => {
-    signer.expectSignatures(lightningSignatureCount(leaves));
-    return original.call(service, leaves, ...rest);
+  if (!service) return () => {};
+  const undo: Array<() => void> = [];
+
+  const announce = (method: string, count: (args: unknown[]) => number) => {
+    const original = service[method] as ((...args: unknown[]) => unknown) | undefined;
+    if (typeof original !== "function") return;
+    service[method] = ((...args: unknown[]) => {
+      signer.expectSignatures(count(args));
+      return original.apply(service, args);
+    }) as never;
+    undo.push(() => {
+      service[method] = original as never;
+    });
   };
-  return () => {
-    service.prepareTransferForLightning = original;
-  };
+
+  announce("prepareTransferForLightning", ([leaves]) => leafSignatureCount(leaves as LeafPrep));
+  announce("sendSwapTransfer", ([leaves]) => leafSignatureCount(leaves as LeafPrep));
+  announce("claimTransferSignRefunds", ([, leafKeys]) => leafSignatureCount(leafKeys as LeafPrep));
+  return () => undo.forEach((restore) => restore());
 }
 
 /** Every Sign the payment triggers is confirmed on the device, so this must never use withoutSpendConfirmation. */
@@ -94,7 +104,7 @@ export async function payInvoice(
   signer: BleHardwareSigner,
   params: Parameters<typeof buildPayParams>[0],
 ) {
-  const restore = announceSignatureCount(wallet, signer);
+  const restore = announceSignatureCounts(wallet, signer);
   try {
     return await signer.withSpendContext(
       { amountSats: params.amountSats, destination: shortInvoice(params.invoice) },
@@ -103,4 +113,18 @@ export async function payInvoice(
   } finally {
     restore();
   }
+}
+
+/** "Signature 2 of 4" shows the signature being waited on; before the SDK reports anything it is just "Sending payment...". */
+export function progressLabel(progress: SignProgress | null): string {
+  if (!progress) return "Sending payment...";
+  const current = progress.confirmed + 1;
+  return progress.total === null ? `Signature ${current}` : `Signature ${Math.min(current, progress.total)} of ${progress.total}`;
+}
+
+/** Never goes backwards: a payment that swaps leaves first learns its later phases' sizes only as it goes, so the
+ * ring may pause while the total grows but must not shrink. */
+export function nextProgressRatio(previous: number | null, progress: SignProgress | null): number | null {
+  if (!progress || progress.total === null || progress.total === 0) return previous;
+  return Math.max(previous ?? 0, Math.min(1, progress.confirmed / progress.total));
 }
