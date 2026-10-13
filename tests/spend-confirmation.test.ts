@@ -94,3 +94,28 @@ describe("spend confirmation wrappers", () => {
     expect((await ctx.sign()).requiresConfirmation).toBe(true);
   });
 });
+
+describe("signature count", () => {
+  it("reports each confirmed signature during a payment, then clears", async () => {
+    const { signer, sign } = setup();
+    const seen: Array<number | null> = [];
+    signer.onSignatureConfirmed = (n) => seen.push(n);
+
+    await signer.withSpendContext({ amountSats: 1n, destination: "d" }, async () => {
+      await sign();
+      await sign();
+    });
+
+    expect(seen).toEqual([1, 2, null]);
+  });
+
+  it("does not count claim signatures that skip confirmation", async () => {
+    const { signer, sign } = setup();
+    const seen: Array<number | null> = [];
+    signer.onSignatureConfirmed = (n) => seen.push(n);
+
+    await signer.withoutSpendConfirmation(() => sign());
+
+    expect(seen).toEqual([]);
+  });
+});
