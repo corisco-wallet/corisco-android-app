@@ -61,6 +61,7 @@ export function SendScreen({
   const [invoiceDecoded, setInvoiceDecoded] = useState(false);
   const [maxLoading, setMaxLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [signaturesConfirmed, setSignaturesConfirmed] = useState<number | null>(null);
   const [paying, setPaying] = useState(false);
   // Full-screen result shown once `pay()` finishes, success or failure --
   // distinct from `error` below, which is only ever a pre-flight/form
@@ -202,6 +203,7 @@ export function SendScreen({
     if (!trimmed || !canPay || effectiveAmountSats === null) return;
     setPaying(true);
     setError(null);
+    signer.onSignatureConfirmed = setSignaturesConfirmed;
     try {
       // Every Sign this triggers requires on-device confirmation -- see
       // `withSpendContext`'s doc comment for why it doesn't try to filter
@@ -218,6 +220,8 @@ export function SendScreen({
     } catch (err) {
       setPayOutcome({ ok: false, message: String(err) });
     } finally {
+      signer.onSignatureConfirmed = undefined;
+      setSignaturesConfirmed(null);
       setPaying(false);
     }
   };
@@ -235,7 +239,10 @@ export function SendScreen({
   // more deliberate status screen (same reasoning as SyncingScreen's
   // wallet-load indicator).
   if (paying) {
-    return <SendingScreen label="Sending payment..." />;
+    const label = signaturesConfirmed
+      ? `Sending payment...\nSignatures confirmed: ${signaturesConfirmed}`
+      : "Sending payment...";
+    return <SendingScreen label={label} />;
   }
 
   if (payOutcome) {
