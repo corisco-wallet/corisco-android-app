@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/corisco-wallet/corisco-android-app/compare/v0.2.0...v0.2.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **app:** disable leaf optimization and show signature count ([#22](https://github.com/corisco-wallet/corisco-android-app/issues/22)) ([dd5be6a](https://github.com/corisco-wallet/corisco-android-app/commit/dd5be6a12664a6b783ea433e3fb8eda61a03c805))
+
 ## [0.2.0](https://github.com/corisco-wallet/corisco-android-app/compare/v0.1.0...v0.2.0) (2026-10-06)
 
 
