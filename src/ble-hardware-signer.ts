@@ -71,14 +71,9 @@ export class BleHardwareSigner extends DefaultSparkSigner {
   // selfCommitment later.
   private pendingCommitmentIds = new Map<SigningCommitment, number>();
 
-  // Depth counter, not a plain bool, so nested/concurrent claim-related
-  // calls (e.g. one claim's Promise.all of several leaves) don't have one
-  // finishing early re-enable confirmation while a sibling call is still
-  // in flight. See ble.rs's `requires_confirmation` doc comment for why
-  // this exists at all: gating every `Sign` uniformly (including the
-  // refund-tx signatures a claim needs, which don't move value anywhere)
-  // means claiming needs enough sequential physical taps to risk a BLE
-  // disconnect mid-claim.
+  // Depth counter, not a plain bool, so one nested/concurrent claim call finishing doesn't
+  // re-enable confirmation while a sibling is still in flight. Claims send requiresConfirmation
+  // false so they need no taps; the device still prompts for any leaf it didn't see being claimed.
   private spendConfirmationSuppressedDepth = 0;
 
   // Set only while a `withSpendContext`-wrapped send is in flight; `null`
@@ -94,12 +89,9 @@ export class BleHardwareSigner extends DefaultSparkSigner {
     super();
   }
 
-  /** Runs `fn` with `Sign` requests it triggers marked as not needing an
-   * on-device confirmation tap -- for the SDK's own internal protocol
-   * signing (refund transactions during a claim), never for anything that
-   * actually spends the wallet's funds. Callers are responsible for only
-   * wrapping claim-shaped operations; this class has no way to verify
-   * that from a `SignFrostParams` alone (see ble.rs's doc comment). */
+  /** Marks the `Sign` requests `fn` triggers as claim refund-tx signatures (`requiresConfirmation:
+   * false`). Only wrap claim-shaped operations: the device skips the prompt only for leaves it saw
+   * being claimed, but this class can't verify from a `SignFrostParams` what a call is for. */
   async withoutSpendConfirmation<T>(fn: () => Promise<T>): Promise<T> {
     this.spendConfirmationSuppressedDepth++;
     try {
