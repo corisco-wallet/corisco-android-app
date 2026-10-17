@@ -43,6 +43,9 @@ jobs:
       # Inlined into the JS bundle. Regtest unless the repo variable
       # SPARK_NETWORK (Settings > Variables) is set to MAINNET.
       EXPO_PUBLIC_SPARK_NETWORK: ${{ vars.SPARK_NETWORK || 'REGTEST' }}
+      # Optional; both must be set (Settings > Variables) to turn Lightning addresses on.
+      EXPO_PUBLIC_LNADDRESS_DOMAIN: ${{ vars.LNADDRESS_DOMAIN }}
+      EXPO_PUBLIC_LNADDRESS_API_URL: ${{ vars.LNADDRESS_API_URL }}
     steps:
       - uses: actions/checkout@v4
         with:
