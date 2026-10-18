@@ -1,6 +1,7 @@
-// Generate a Lightning invoice -- automatically on open (any amount), and
-// again whenever the user types a fixed amount -- show it as a QR code,
-// and let the user copy the raw invoice string.
+// Show the wallet's Lightning address (with an lnurl QR) by default. Once the
+// user types an amount or note, generate a one-off Lightning invoice instead and
+// show it as a QR code with a copy button. Without an address (feature off, or
+// not available yet) an any-amount invoice is generated on open.
 //
 // BTC L1 receiving (a static deposit address) was tried and deliberately
 // removed: generating the address only needs a public key (safe), but
@@ -12,13 +13,11 @@
 // strand real funds, so the whole feature was pulled rather than shipped
 // half-working.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   StyleSheet,
-  ScrollView,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -26,11 +25,25 @@ import * as Clipboard from "expo-clipboard";
 import QRCode from "react-native-qrcode-svg";
 import Svg, { Path, Polyline, Rect } from "react-native-svg";
 import type { SparkWallet as SparkWalletType } from "@buildonspark/spark-sdk";
+import { AmountCard } from "../components/AmountCard";
+import { KeyboardScroll } from "../components/KeyboardScroll";
 import { shortenInvoice } from "../invoice-format";
+import { lightningAddressPayUrl, lnurlEncode } from "../lnurl";
+import { LIGHTNING_ADDRESS } from "../network";
 import { formatBtc } from "../price";
 import { MAX_MEMO_LENGTH, createReceiveInvoice, parseAmountSats } from "../receive-invoice";
 import type { Settings } from "../settings-store";
 import { colors, radii, spacing } from "../theme";
+
+// Quartile error correction leaves room for the centered logo to cover modules without breaking scans.
+const QR_LOGO = {
+  logo: require("../../assets/icon.png"),
+  logoSize: 48,
+  logoMargin: 3,
+  logoBorderRadius: 10,
+  logoBackgroundColor: "#FFFFFF",
+  ecl: "Q" as const,
+};
 
 // Hand-drawn (Feather-style) icons via react-native-svg -- already a
 // dependency for the QR code above -- rather than an emoji glyph, which
@@ -56,10 +69,16 @@ function CheckIcon({ color, size = 20 }: { color: string; size?: number }) {
 export function ReceiveScreen({
   wallet,
   settings,
+  lightningAddress,
+  addressFailed,
+  onRetryAddress,
   onBack,
 }: {
   wallet: SparkWalletType;
   settings: Settings;
+  lightningAddress: string | null;
+  addressFailed: boolean;
+  onRetryAddress: () => void;
   onBack: () => void;
 }) {
   const btc = settings.balanceUnit === "btc";
@@ -78,12 +97,29 @@ export function ReceiveScreen({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // The address is the default; any amount or note switches to a one-off invoice, and clearing both switches back.
+  const customizing = amountText.trim() !== "" || memoText.trim() !== "";
+  const showAddress = lightningAddress !== null && !customizing;
+  const addressLnurl = useMemo(() => {
+    if (!lightningAddress || !LIGHTNING_ADDRESS) return null;
+    const username = lightningAddress.slice(0, lightningAddress.lastIndexOf("@"));
+    return lnurlEncode(lightningAddressPayUrl(username, LIGHTNING_ADDRESS.domain)).toUpperCase();
+  }, [lightningAddress]);
+
   // Generates an invoice for `amountSats` (0 = any amount) and, only if
   // this is still the most recent request in flight, shows it -- guards
   // against an in-flight regenerate for an amount the user has since
   // changed again from clobbering a newer one that resolves first.
   useEffect(() => {
     let cancelled = false;
+    // Each invoice stores operator shares, so none is created while the address is what's shown.
+    if (showAddress) {
+      setInvoice(null);
+      setInvoiceAmountSats(null);
+      setGenerating(false);
+      setError(null);
+      return;
+    }
     const amountSats = parseAmountSats(amountText, btc);
     if (amountSats === null) {
       setError("Enter a valid amount, or leave it blank for any amount");
@@ -115,17 +151,17 @@ export function ReceiveScreen({
       clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amountText, memoText, btc, wallet]);
+  }, [amountText, memoText, btc, wallet, showAddress]);
 
-  const copy = async () => {
-    if (!invoice) return;
-    await Clipboard.setStringAsync(invoice);
+  const copy = async (text: string | null) => {
+    if (!text) return;
+    await Clipboard.setStringAsync(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <ScrollView
+    <KeyboardScroll
       style={styles.scroll}
       contentContainerStyle={styles.container}
       keyboardShouldPersistTaps="handled"
@@ -136,29 +172,35 @@ export function ReceiveScreen({
 
       <Text style={styles.title}>Receive</Text>
 
-      <Text style={styles.label}>Amount ({unitLabel})</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Any amount"
-        placeholderTextColor={colors.textMuted}
-        value={amountText}
-        onChangeText={setAmountText}
-        keyboardType={btc ? "decimal-pad" : "number-pad"}
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Add a note"
-        placeholderTextColor={colors.textMuted}
-        value={memoText}
-        onChangeText={setMemoText}
-        maxLength={MAX_MEMO_LENGTH}
-      />
-
+      {showAddress && addressLnurl && (
+        <View style={styles.invoiceBlock}>
+          <View style={styles.qrWrap}>
+            <QRCode value={addressLnurl} size={210} backgroundColor="#FFFFFF" color="#000000" {...QR_LOGO} />
+          </View>
+          <Text style={styles.amountLabel}>Lightning address</Text>
+          <Text style={styles.addressText} selectable>
+            {lightningAddress}
+          </Text>
+          <TouchableOpacity style={styles.copyButton} onPress={() => copy(lightningAddress)}>
+            {copied ? <CheckIcon color={colors.success} /> : <CopyIcon color={colors.textPrimary} />}
+          </TouchableOpacity>
+          <Text style={styles.hint}>Any amount. Enter an amount or note below for a one-time invoice.</Text>
+        </View>
+      )}
+      {LIGHTNING_ADDRESS && !lightningAddress && (
+        <View style={styles.bannerRow}>
+          <Text style={styles.hint}>{addressFailed ? "Lightning address unavailable." : "Loading Lightning address..."}</Text>
+          {addressFailed && (
+            <TouchableOpacity onPress={onRetryAddress}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
       {invoice && !error && (
         <View style={styles.invoiceBlock}>
           <View style={styles.qrWrap}>
-            <QRCode value={invoice} size={210} backgroundColor="#FFFFFF" color="#000000" />
+            <QRCode value={invoice} size={210} backgroundColor="#FFFFFF" color="#000000" {...QR_LOGO} />
           </View>
           <Text style={styles.amountLabel}>
             {invoiceAmountSats && invoiceAmountSats > 0 ? `${formatAmount(invoiceAmountSats)} ${unitLabel}` : "Any amount"}
@@ -169,7 +211,7 @@ export function ReceiveScreen({
               {expanded ? invoice : shortenInvoice(invoice)}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.copyButton} onPress={copy}>
+          <TouchableOpacity style={styles.copyButton} onPress={() => copy(invoice)}>
             {copied ? <CheckIcon color={colors.success} /> : <CopyIcon color={colors.textPrimary} />}
           </TouchableOpacity>
         </View>
@@ -181,7 +223,17 @@ export function ReceiveScreen({
         </View>
       )}
       {error && <Text style={styles.error}>{error}</Text>}
-    </ScrollView>
+
+      <View style={styles.inputs}>
+        <AmountCard
+          unitLabel={unitLabel}
+          amountText={amountText}
+          onAmountChange={setAmountText}
+          decimal={btc}
+          note={{ value: memoText, onChange: setMemoText, maxLength: MAX_MEMO_LENGTH }}
+        />
+      </View>
+    </KeyboardScroll>
   );
 }
 
@@ -207,21 +259,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "700",
     marginBottom: spacing.xl,
-  },
-  label: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    marginBottom: spacing.sm,
-  },
-  input: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    color: colors.textPrimary,
-    fontSize: 18,
-    marginBottom: spacing.lg,
   },
   copyButton: {
     width: 48,
@@ -262,6 +299,34 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     marginBottom: spacing.sm,
+  },
+  inputs: {
+    marginTop: spacing.xl,
+  },
+  addressText: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    textAlign: "center",
+    marginBottom: spacing.sm,
+  },
+  hint: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: spacing.md,
+  },
+  bannerRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  retryText: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: spacing.md,
   },
   invoiceText: {
     color: colors.textSecondary,

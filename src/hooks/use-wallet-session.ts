@@ -35,6 +35,7 @@ export function useWalletSession({
   const [wallet, setWallet] = useState<SparkWalletType | null>(null);
   const [identityPubkey, setIdentityPubkey] = useState<string | null>(null);
   const [lightningAddress, setLightningAddress] = useState<string | null>(null);
+  const [lightningAddressFailed, setLightningAddressFailed] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const [connecting, setConnecting] = useState(false);
@@ -49,6 +50,7 @@ export function useWalletSession({
   const loadLightningAddress = useCallback(async (pubkey: string, signer: BleHardwareSigner) => {
     if (!LIGHTNING_ADDRESS || registeringRef.current) return;
     registeringRef.current = true;
+    setLightningAddressFailed(false);
     try {
       const username = await ensureUsername({
         config: LIGHTNING_ADDRESS,
@@ -59,10 +61,15 @@ export function useWalletSession({
       if (signerRef.current === signer) setLightningAddress(formatAddress(username, LIGHTNING_ADDRESS.domain));
     } catch (err) {
       console.warn("lightning address unavailable:", err);
+      if (signerRef.current === signer) setLightningAddressFailed(true);
     } finally {
       registeringRef.current = false;
     }
   }, []);
+
+  const retryLightningAddress = useCallback(() => {
+    if (identityPubkey && signerRef.current) void loadLightningAddress(identityPubkey, signerRef.current);
+  }, [identityPubkey, loadLightningAddress]);
 
   // `syncProgress` advances on real stage completions in `connectAndInit`, hitting 100% when data is in hand.
   const [syncing, setSyncing] = useState(false);
@@ -207,6 +214,7 @@ export function useWalletSession({
     setWallet(null);
     setIdentityPubkey(null);
     setLightningAddress(null);
+    setLightningAddressFailed(false);
     resetMaintenance();
     setLoading(true);
     setSyncing(false);
@@ -219,6 +227,8 @@ export function useWalletSession({
     signerRef,
     identityPubkey,
     lightningAddress,
+    lightningAddressFailed,
+    retryLightningAddress,
     loading,
     connecting,
     connectingId,

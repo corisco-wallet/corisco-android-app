@@ -18,6 +18,9 @@ type Props = {
   wallet: SparkWalletType;
   signer: BleHardwareSigner;
   identityPubkey: string | null;
+  lightningAddress: string | null;
+  lightningAddressFailed: boolean;
+  onRetryLightningAddress: () => void;
   availableSats: bigint | null;
   incomingSats: bigint | null;
   claiming: boolean;
@@ -62,7 +65,16 @@ export function WalletNavigator(props: Props) {
           btcPrice={btcPrice}
         />
       )}
-      {screen === "receive" && <ReceiveScreen wallet={wallet} settings={settings} onBack={goHome} />}
+      {screen === "receive" && (
+        <ReceiveScreen
+          wallet={wallet}
+          settings={settings}
+          lightningAddress={props.lightningAddress}
+          addressFailed={props.lightningAddressFailed}
+          onRetryAddress={props.onRetryLightningAddress}
+          onBack={goHome}
+        />
+      )}
       {screen === "send" && (
         <SendScreen
           wallet={wallet}
