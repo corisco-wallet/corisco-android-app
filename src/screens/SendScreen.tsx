@@ -1,7 +1,10 @@
-// Pay a Lightning invoice, either pasted in directly or scanned from a QR
-// code.
+// Pay a Lightning invoice, a Lightning address (user@domain) or an LNURL, pasted
+// in directly or scanned from a QR code. An address or LNURL is resolved to a pay
+// request, and an invoice for the typed amount is requested automatically (again
+// whenever the amount changes); it then goes through the same fee preview and
+// payment path as a pasted invoice.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
@@ -16,6 +19,8 @@ import type { SparkWallet as SparkWalletType } from "@buildonspark/spark-sdk";
 import type { BleHardwareSigner } from "../ble-hardware-signer";
 import { AmountCard } from "../components/AmountCard";
 import { KeyboardScroll } from "../components/KeyboardScroll";
+import { fetchPayRequest, requestInvoice, satsRange, type FetchedInvoice, type PayRequest } from "../lnurl-pay";
+import { parsePaymentInput } from "../payment-input";
 import { colors, radii, spacing } from "../theme";
 import { formatBtc } from "../price";
 import {
@@ -27,6 +32,18 @@ import {
 import type { Settings } from "../settings-store";
 import { SendingScreen } from "./SendingScreen";
 import { SendResultScreen } from "./SendResultScreen";
+
+type LnurlState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; request: PayRequest }
+  | { status: "error"; message: string };
+
+function successActionText(invoice: FetchedInvoice | null): string {
+  const action = invoice?.successAction;
+  if (!action) return "";
+  return action.tag === "message" ? `\n${action.message}` : `\n${action.description}\n${action.url}`;
+}
 
 export function SendScreen({
   wallet,
@@ -47,6 +64,11 @@ export function SendScreen({
   const unitLabel = btc ? "BTC" : "sats";
   const formatAmount = (sats: bigint) => (btc ? formatBtc(sats) : sats.toString());
   const [invoice, setInvoice] = useState("");
+  // The bolt11 that actually gets fee-estimated and paid: the pasted invoice, or the one fetched for an address.
+  const [activeInvoice, setActiveInvoice] = useState("");
+  const [lnurlState, setLnurlState] = useState<LnurlState>({ status: "idle" });
+  const [lnurlInvoice, setLnurlInvoice] = useState<FetchedInvoice | null>(null);
+  const [fetchingInvoice, setFetchingInvoice] = useState(false);
   const [invoiceFocused, setInvoiceFocused] = useState(false);
   const [amountText, setAmountText] = useState("");
   // The amount a *fixed-amount* invoice carries, decoded as the invoice
@@ -72,25 +94,61 @@ export function SendScreen({
   const [error, setError] = useState<string | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
 
-  const handleInvoiceChange = (text: string) => {
-    const trimmed = text.trim();
-    setInvoice(trimmed);
-    setError(null);
-    if (!trimmed) {
-      setInvoiceAmountSats(null);
-      setInvoiceDecoded(false);
+  const parsed = useMemo(() => parsePaymentInput(invoice), [invoice]);
+  const payUrl = parsed && parsed.kind !== "bolt11" ? parsed.payUrl : null;
+
+  // Debounced so a half-typed address doesn't query a domain on every keystroke.
+  useEffect(() => {
+    if (!payUrl) {
+      setLnurlState({ status: "idle" });
       return;
     }
+    let cancelled = false;
+    setLnurlState({ status: "loading" });
+    const timer = setTimeout(() => {
+      fetchPayRequest(payUrl)
+        .then((request) => {
+          if (!cancelled) setLnurlState({ status: "ready", request });
+        })
+        .catch((err) => {
+          if (!cancelled) setLnurlState({ status: "error", message: err instanceof Error ? err.message : String(err) });
+        });
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [payUrl]);
+
+  const clearResolvedInvoice = () => {
+    setActiveInvoice("");
+    setLnurlInvoice(null);
+    setInvoiceAmountSats(null);
+    setInvoiceDecoded(false);
+  };
+
+  const handleInvoiceChange = (text: string) => {
+    const trimmed = text.trim();
+    const input = parsePaymentInput(trimmed);
+    setInvoice(input?.kind === "bolt11" ? input.invoice : input?.kind === "lightning-address" ? input.address : trimmed.replace(/^lightning:/i, ""));
+    setError(null);
+    clearResolvedInvoice();
+    if (!trimmed) return;
+    if (input && input.kind !== "bolt11") {
+      // The previous invoice's fixed amount must not carry over to an address.
+      if (invoiceAmountSats !== null) setAmountText("");
+      return;
+    }
+    const candidate = input?.kind === "bolt11" ? input.invoice : trimmed;
     try {
-      const decoded = decodeInvoiceAmountSats(trimmed);
+      const decoded = decodeInvoiceAmountSats(candidate);
+      setActiveInvoice(candidate);
       setInvoiceAmountSats(decoded);
       setInvoiceDecoded(true);
       if (decoded !== null) setAmountText(formatAmount(decoded));
     } catch {
       // Not yet a decodable invoice (still mid-paste, or garbage) --
       // leave whatever's already in the amount field alone.
-      setInvoiceAmountSats(null);
-      setInvoiceDecoded(false);
     }
   };
 
@@ -108,7 +166,7 @@ export function SendScreen({
 
   const onBarcodeScanned = ({ data }: { data: string }) => {
     setScanning(false);
-    handleInvoiceChange(data.trim());
+    handleInvoiceChange(data);
   };
 
   // What amount actually gets sent: the invoice's own fixed amount if it
@@ -116,6 +174,48 @@ export function SendScreen({
   // 0-amount invoice, where the payer chooses).
   const manualAmountSats = parseManualAmountSats(amountText, btc);
   const effectiveAmountSats = invoiceAmountSats ?? manualAmountSats;
+  const lnurlRequest = lnurlState.status === "ready" ? lnurlState.request : null;
+  const range = lnurlRequest ? satsRange(lnurlRequest) : null;
+  const inRange = range !== null && manualAmountSats !== null && manualAmountSats >= range.minSats && manualAmountSats <= range.maxSats;
+
+  // The previous invoice is dropped at once so Pay can never use one for an older amount.
+  useEffect(() => {
+    if (!lnurlRequest) {
+      setFetchingInvoice(false);
+      return;
+    }
+    setLnurlInvoice(null);
+    setActiveInvoice("");
+    setInvoiceAmountSats(null);
+    setInvoiceDecoded(false);
+    if (!inRange || manualAmountSats === null) {
+      setFetchingInvoice(false);
+      return;
+    }
+    let cancelled = false;
+    setFetchingInvoice(true);
+    setError(null);
+    const timer = setTimeout(() => {
+      requestInvoice({ request: lnurlRequest, amountSats: manualAmountSats })
+        .then((fetched) => {
+          if (cancelled) return;
+          setLnurlInvoice(fetched);
+          setActiveInvoice(fetched.pr);
+          setInvoiceAmountSats(manualAmountSats);
+          setInvoiceDecoded(true);
+        })
+        .catch((err) => {
+          if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        })
+        .finally(() => {
+          if (!cancelled) setFetchingInvoice(false);
+        });
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [lnurlRequest, manualAmountSats, inRange]);
 
   // Real fee estimate (not a guess) from the SDK, refetched whenever the
   // invoice or amount changes -- debounced since amount typing (for a
@@ -127,7 +227,7 @@ export function SendScreen({
   const [feeError, setFeeError] = useState<string | null>(null);
 
   useEffect(() => {
-    const trimmed = invoice.trim();
+    const trimmed = activeInvoice;
     if (!trimmed || effectiveAmountSats === null) {
       setFeeEstimateSats(null);
       setFeeError(null);
@@ -163,7 +263,7 @@ export function SendScreen({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [invoice, effectiveAmountSats, invoiceAmountSats, wallet]);
+  }, [activeInvoice, effectiveAmountSats, invoiceAmountSats, wallet]);
 
   const insufficientFunds = isInsufficientFunds({
     availableSats,
@@ -181,7 +281,7 @@ export function SendScreen({
       const fee = BigInt(
         Math.ceil(
           await wallet.getLightningSendFeeEstimate({
-            encodedInvoice: invoice.trim(),
+            encodedInvoice: activeInvoice,
             amountSats: Number(availableSats),
           }),
         ),
@@ -200,7 +300,7 @@ export function SendScreen({
 
   const pay = async () => {
     Keyboard.dismiss();
-    const trimmed = invoice.trim();
+    const trimmed = activeInvoice;
     if (!trimmed || !canPay || effectiveAmountSats === null) return;
     setPaying(true);
     setError(null);
@@ -216,7 +316,7 @@ export function SendScreen({
         amountSats: effectiveAmountSats,
         feeEstimateSats,
       });
-      setPayOutcome({ ok: true, message: `${formatAmount(effectiveAmountSats)} ${unitLabel} sent` });
+      setPayOutcome({ ok: true, message: `${formatAmount(effectiveAmountSats)} ${unitLabel} sent${successActionText(lnurlInvoice)}` });
       onPaid();
     } catch (err) {
       setPayOutcome({ ok: false, message: String(err) });
@@ -288,11 +388,11 @@ export function SendScreen({
 
       <Text style={styles.title}>Send</Text>
 
-      <Text style={styles.label}>Lightning invoice</Text>
+      <Text style={styles.label}>Invoice, Lightning address or LNURL</Text>
       {invoiceFocused ? (
         <TextInput
           style={[styles.input, styles.inputExpanded]}
-          placeholder="lnbc..."
+          placeholder="lnbc..., name@domain or lnurl1..."
           placeholderTextColor={colors.textMuted}
           value={invoice}
           onChangeText={handleInvoiceChange}
@@ -309,20 +409,27 @@ export function SendScreen({
             numberOfLines={1}
             ellipsizeMode="middle"
           >
-            {invoice || "lnbc..."}
+            {invoice || "lnbc..., name@domain or lnurl1..."}
           </Text>
         </TouchableOpacity>
       )}
-      {invoiceDecoded && <Text style={styles.validText}>Valid Lightning invoice</Text>}
-      {!invoiceDecoded && invoice !== "" && !invoiceFocused && (
-        <Text style={styles.invalidText}>Not a valid Lightning invoice</Text>
+      {invoiceDecoded && !lnurlInvoice && <Text style={styles.validText}>Valid Lightning invoice</Text>}
+      {payUrl && lnurlState.status === "loading" && <Text style={styles.hint}>Looking up payment request...</Text>}
+      {payUrl && lnurlState.status === "error" && <Text style={styles.invalidText}>{lnurlState.message}</Text>}
+      {lnurlRequest && (
+        <Text style={styles.validText}>
+          {lnurlRequest.description}
+        </Text>
+      )}
+      {!invoiceDecoded && !payUrl && invoice !== "" && !invoiceFocused && (
+        <Text style={styles.invalidText}>Not a valid invoice, Lightning address or LNURL</Text>
       )}
 
       <TouchableOpacity style={styles.secondaryButtonOutline} onPress={startScan}>
         <Text style={styles.secondaryButtonOutlineText}>Scan QR code</Text>
       </TouchableOpacity>
 
-      {invoiceDecoded && (
+      {(invoiceDecoded || lnurlRequest) && (
         <>
           <AmountCard
             unitLabel={unitLabel}
@@ -330,16 +437,25 @@ export function SendScreen({
             onAmountChange={setAmountText}
             decimal={btc}
             amountPlaceholder="Enter amount"
-            amountLocked={invoiceAmountSats !== null}
+            amountLocked={invoiceAmountSats !== null && !payUrl}
             action={
-              invoiceAmountSats === null
+              invoiceAmountSats === null && activeInvoice !== ""
                 ? { label: maxLoading ? "..." : "Max", onPress: sendMax, disabled: maxLoading || availableSats === null }
                 : undefined
             }
           />
           <Text style={styles.hint}>
-            {invoiceAmountSats !== null ? "Amount set by the invoice." : "This invoice doesn't set an amount -- enter one."}
+            {lnurlRequest
+              ? range
+                ? `Between ${formatAmount(range.minSats)} and ${formatAmount(range.maxSats)} ${unitLabel}.`
+                : "This payment request accepts no whole-sat amount."
+              : invoiceAmountSats !== null
+                ? "Amount set by the invoice."
+                : "This invoice doesn't set an amount -- enter one."}
           </Text>
+          {lnurlRequest && manualAmountSats !== null && !inRange && range && (
+            <Text style={styles.error}>Amount is outside the allowed range.</Text>
+          )}
           {insufficientFunds && availableSats !== null && (
             <Text style={styles.error}>
               Exceeds your available balance of {formatAmount(availableSats)} {unitLabel} (amount + fee).
@@ -364,11 +480,11 @@ export function SendScreen({
       )}
 
       <TouchableOpacity
-        style={[styles.primaryButton, !canPay && styles.primaryButtonDisabled]}
+        style={[styles.primaryButton, (!canPay || fetchingInvoice) && styles.primaryButtonDisabled]}
         onPress={pay}
-        disabled={!canPay}
+        disabled={!canPay || fetchingInvoice}
       >
-        <Text style={styles.primaryButtonText}>Pay</Text>
+        <Text style={styles.primaryButtonText}>{fetchingInvoice ? "Requesting invoice..." : "Pay"}</Text>
       </TouchableOpacity>
 
       {error && <Text style={styles.error}>{error}</Text>}
