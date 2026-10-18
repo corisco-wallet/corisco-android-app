@@ -82,7 +82,7 @@ export function TransactionDetailScreen({
   const feeSats = transferFeeSats(transfer);
   const feeText = feeSats === null ? null : settings.balanceUnit === "btc" ? formatBtc(feeSats) : feeSats.toString();
   const fiatText = btcPrice !== null ? formatFiat(satsToFiat(sats, btcPrice), settings.currency) : null;
-  const memo = incoming ? transferMemo(transfer) : null;
+  const memo = transferMemo(transfer);
   const label = TYPE_LABELS[transfer.type] ?? transfer.type;
   const pending = transfer.status !== "TRANSFER_STATUS_COMPLETED";
 
