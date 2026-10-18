@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0](https://github.com/corisco-wallet/corisco-android-app/compare/v0.2.1...v0.3.0) (2026-10-18)
+
+
+### Features
+
+* **app:** pay lightning addresses and lnurl from the send screen ([#29](https://github.com/corisco-wallet/corisco-android-app/issues/29)) ([c9436fc](https://github.com/corisco-wallet/corisco-android-app/commit/c9436fcaa7042dfbab70798ce8b3e328a7d06380))
+* **app:** register lightning address on connect ([#27](https://github.com/corisco-wallet/corisco-android-app/issues/27)) ([087321e](https://github.com/corisco-wallet/corisco-android-app/commit/087321e888e2766167e2be14a67f1d231d74b8d0))
+* **app:** show lightning address and lnurl qr on the receive screen ([#28](https://github.com/corisco-wallet/corisco-android-app/issues/28)) ([cc1714b](https://github.com/corisco-wallet/corisco-android-app/commit/cc1714b40005c3d8b10cd0caa1572b9fccff5b83))
+
 ## [0.2.1](https://github.com/corisco-wallet/corisco-android-app/compare/v0.2.0...v0.2.1) (2026-10-13)
 
 
