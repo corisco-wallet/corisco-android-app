@@ -8,13 +8,10 @@ import type { WalletTransfer } from "@buildonspark/spark-sdk/types";
 import { colors, radii, spacing } from "../theme";
 import { formatBtc } from "../price";
 import type { Settings } from "../settings-store";
-import { transferMemo } from "../transfer-memo";
+import { transferLabel } from "../transfer-memo";
 
 const HIDDEN = "••••••";
 
-// Shared with TransactionDetailScreen.tsx, which shows the full name for
-// whichever type this maps -- kept here since this is where the type ->
-// label mapping already lived.
 export const TYPE_LABELS: Partial<Record<WalletTransfer["type"], string>> = {
   PREIMAGE_SWAP: "Lightning",
   TRANSFER: "Spark transfer",
@@ -35,11 +32,10 @@ function formatWhen(date: Date | undefined): string {
 
 function Row({ transfer, settings, onPress }: { transfer: WalletTransfer; settings: Settings; onPress: () => void }) {
   const incoming = transfer.transferDirection === "INCOMING";
-  const label = TYPE_LABELS[transfer.type] ?? transfer.type;
+  const label = transferLabel(transfer);
   const pending = transfer.status !== "TRANSFER_STATUS_COMPLETED";
   const sats = BigInt(Math.trunc(transfer.totalValue));
   const btc = settings.balanceUnit === "btc";
-  const memo = incoming ? transferMemo(transfer) : null;
   const amountText = settings.hideAmounts ? HIDDEN : btc ? formatBtc(sats) : sats.toString();
 
   return (
@@ -48,16 +44,13 @@ function Row({ transfer, settings, onPress }: { transfer: WalletTransfer; settin
         <Text style={[styles.icon, incoming ? styles.iconIn : styles.iconOut]}>{incoming ? "↓" : "↑"}</Text>
       </View>
       <View style={styles.middle}>
-        <Text style={styles.label}>{label}</Text>
+        <Text style={styles.label} numberOfLines={1}>
+          {label}
+        </Text>
         <Text style={styles.when}>
           {formatWhen(transfer.createdTime)}
           {pending ? " · pending" : ""}
         </Text>
-        {memo && (
-          <Text style={styles.memo} numberOfLines={1}>
-            {memo}
-          </Text>
-        )}
       </View>
       <Text style={[styles.amount, incoming ? styles.amountIn : styles.amountOut]}>
         {incoming ? "+" : "-"}
@@ -163,11 +156,6 @@ const styles = StyleSheet.create({
   },
   when: {
     color: colors.textMuted,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  memo: {
-    color: colors.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },
