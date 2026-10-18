@@ -91,6 +91,27 @@ describe("validateInvoice", () => {
   it("rejects text that is not an invoice", () => {
     expect(() => validateInvoice("lnbc1garbage", METADATA, 1000n)).toThrow();
   });
+
+  describe("an invoice with a plain description and no h tag", () => {
+    // A real mainnet invoice and pay request from Wallet of Satoshi (1000 sats).
+    const WOS_METADATA = "[[\"text/plain\",\"Wallet of Satoshi: palefuel804\"],[\"text/identifier\",\"palefuel804@walletofsatoshi.com\"]]";
+    const WOS_INVOICE =
+      "lnbc10u1p4dfcc0pp53c0wdm2vf7f5d5jf5cjvqjvctz072lc9pwvd8q3kgg09renqg3ussp5k3ahk85mf6u2ksw8e4kstfawagzakpn8xfstgvmt2xnvggmm0q9qxq9z0rgqnp4qvyndeaqzman7h898jxm98dzkm0mlrsx36s93smrur7h0azyyuxc5rzjq25carzepgd4vqsyn44jrk85ezrpju92xyrk9apw4cdjh6yrwt5jgqqqqrt49lmtcqqqqqqqqqqq86qq9qrzjqglfh5e5566mew0sf0fda07c43kcx4ganfv3gtzmh8727h2ej4sa8apyqr6zgqqqq8hxk2qqae4jsqyugqcqzpudps2askcmr9wssx7e3q2dshgmmndp5n5grsv9kx2en4v4krsvp59qyyssqlc0t8kfkk24rwma8j2hru7wxavzamxeyfr04023xu8rxs3eywd7p6jy9wejcuhv3tnfdvjz8ntckr56zahmdmmujnjtl0zvyx7upsyqq3lzewp";
+
+    it("is accepted when the description is the request's text/plain entry", () => {
+      expect(() => validateInvoice(WOS_INVOICE, WOS_METADATA, 1_000_000n)).not.toThrow();
+    });
+
+    it("is refused when the description is different", () => {
+      expect(() => validateInvoice(WOS_INVOICE, WOS_METADATA.replace("palefuel804", "someoneelse"), 1_000_000n)).toThrow(
+        "does not match the payment request",
+      );
+    });
+
+    it("is refused for a different amount", () => {
+      expect(() => validateInvoice(WOS_INVOICE, WOS_METADATA, 2_000_000n)).toThrow("amount");
+    });
+  });
 });
 
 describe("requestInvoice", () => {
