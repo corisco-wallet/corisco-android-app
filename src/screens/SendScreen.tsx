@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,6 +14,8 @@ import {
 import { CameraView, useCameraPermissions } from "expo-camera";
 import type { SparkWallet as SparkWalletType } from "@buildonspark/spark-sdk";
 import type { BleHardwareSigner } from "../ble-hardware-signer";
+import { AmountCard } from "../components/AmountCard";
+import { KeyboardScroll } from "../components/KeyboardScroll";
 import { colors, radii, spacing } from "../theme";
 import { formatBtc } from "../price";
 import {
@@ -276,7 +277,7 @@ export function SendScreen({
   }
 
   return (
-    <ScrollView
+    <KeyboardScroll
       style={styles.scroll}
       contentContainerStyle={styles.container}
       keyboardShouldPersistTaps="handled"
@@ -323,22 +324,18 @@ export function SendScreen({
 
       {invoiceDecoded && (
         <>
-          <View style={styles.amountHeader}>
-            <Text style={styles.label}>Amount ({unitLabel})</Text>
-            {invoiceAmountSats === null && (
-              <TouchableOpacity onPress={sendMax} disabled={maxLoading || availableSats === null}>
-                <Text style={styles.maxText}>{maxLoading ? "..." : "Max"}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          <TextInput
-            style={[styles.amountInput, invoiceAmountSats !== null && styles.amountInputLocked]}
-            placeholder="Enter amount"
-            placeholderTextColor={colors.textMuted}
-            value={amountText}
-            onChangeText={setAmountText}
-            keyboardType={btc ? "decimal-pad" : "number-pad"}
-            editable={invoiceAmountSats === null}
+          <AmountCard
+            unitLabel={unitLabel}
+            amountText={amountText}
+            onAmountChange={setAmountText}
+            decimal={btc}
+            amountPlaceholder="Enter amount"
+            amountLocked={invoiceAmountSats !== null}
+            action={
+              invoiceAmountSats === null
+                ? { label: maxLoading ? "..." : "Max", onPress: sendMax, disabled: maxLoading || availableSats === null }
+                : undefined
+            }
           />
           <Text style={styles.hint}>
             {invoiceAmountSats !== null ? "Amount set by the invoice." : "This invoice doesn't set an amount -- enter one."}
@@ -375,7 +372,7 @@ export function SendScreen({
       </TouchableOpacity>
 
       {error && <Text style={styles.error}>{error}</Text>}
-    </ScrollView>
+    </KeyboardScroll>
   );
 }
 
@@ -436,29 +433,6 @@ const styles = StyleSheet.create({
   inputExpanded: {
     minHeight: 90,
     textAlignVertical: "top",
-  },
-  amountInput: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    color: colors.textPrimary,
-    fontSize: 17,
-    fontWeight: "700",
-  },
-  amountInputLocked: {
-    color: colors.textSecondary,
-  },
-  amountHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  maxText: {
-    color: colors.accent,
-    fontSize: 14,
-    fontWeight: "700",
   },
   hint: {
     color: colors.textMuted,

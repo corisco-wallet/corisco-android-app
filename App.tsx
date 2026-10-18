@@ -106,6 +106,9 @@ export default function App() {
       // Non-null: set together with `wallet` in connectAndInit.
       signer={session.signerRef.current!}
       identityPubkey={session.identityPubkey}
+      lightningAddress={session.lightningAddress}
+      lightningAddressFailed={session.lightningAddressFailed}
+      onRetryLightningAddress={session.retryLightningAddress}
       availableSats={maintenance.availableSats}
       incomingSats={maintenance.incomingSats}
       claiming={maintenance.claiming}
