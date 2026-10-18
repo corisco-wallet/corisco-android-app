@@ -41,6 +41,10 @@ For a standalone APK: `cd android && ./gradlew assembleRelease`
 Local builds use **regtest** (no real funds). To use mainnet, set
 `EXPO_PUBLIC_SPARK_NETWORK=MAINNET` in a `.env` file (see `.env.example`).
 
+To get a Lightning address (`name@domain`) from a
+[corisco-lnaddress](https://github.com/corisco-wallet/corisco-lnaddress) server, set
+`EXPO_PUBLIC_LNADDRESS_DOMAIN` and `EXPO_PUBLIC_LNADDRESS_API_URL` the same way. Leave both unset to turn it off.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) to contribute.
 
 ## License

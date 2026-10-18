@@ -5,7 +5,9 @@ import { BleSignerConnection } from "../ble-transport";
 import { showAlert } from "../components/AppAlert";
 import { findDeviceByPubkey, saveDevice, touchLastConnected, type SavedDevice } from "../device-store";
 import { bytesToHex } from "../hex";
-import { SPARK_NETWORK } from "../network";
+import { ensureUsername, formatAddress } from "../lightning-address";
+import { lightningAddressStore } from "../lightning-address-store";
+import { LIGHTNING_ADDRESS, SPARK_NETWORK } from "../network";
 import type { PendingNewDevice } from "./use-saved-devices";
 import { useWalletMaintenance } from "./use-wallet-maintenance";
 
@@ -32,6 +34,7 @@ export function useWalletSession({
 }: Options) {
   const [wallet, setWallet] = useState<SparkWalletType | null>(null);
   const [identityPubkey, setIdentityPubkey] = useState<string | null>(null);
+  const [lightningAddress, setLightningAddress] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [connecting, setConnecting] = useState(false);
@@ -40,6 +43,26 @@ export function useWalletSession({
   const signerRef = useRef<BleHardwareSigner | null>(null);
   const connRef = useRef<BleSignerConnection | null>(null);
   const walletRef = useRef<SparkWalletType | null>(null);
+  const registeringRef = useRef(false);
+
+  // Never blocks or fails the connection: the wallet works without an address, and the next connect retries.
+  const loadLightningAddress = useCallback(async (pubkey: string, signer: BleHardwareSigner) => {
+    if (!LIGHTNING_ADDRESS || registeringRef.current) return;
+    registeringRef.current = true;
+    try {
+      const username = await ensureUsername({
+        config: LIGHTNING_ADDRESS,
+        identityPubkey: pubkey,
+        signer,
+        store: lightningAddressStore,
+      });
+      if (signerRef.current === signer) setLightningAddress(formatAddress(username, LIGHTNING_ADDRESS.domain));
+    } catch (err) {
+      console.warn("lightning address unavailable:", err);
+    } finally {
+      registeringRef.current = false;
+    }
+  }, []);
 
   // `syncProgress` advances on real stage completions in `connectAndInit`, hitting 100% when data is in hand.
   const [syncing, setSyncing] = useState(false);
@@ -138,6 +161,7 @@ export function useWalletSession({
         setSyncProgress(100);
         setSyncLabel("Ready");
         await new Promise((resolve) => setTimeout(resolve, 400));
+        void loadLightningAddress(pubkey, signer);
       } catch (err) {
         setInitError(String(err));
         // No wallet owns this connection, so don't leave the BLE link open.
@@ -160,6 +184,7 @@ export function useWalletSession({
       refreshBalance,
       refreshTransfers,
       claimPending,
+      loadLightningAddress,
     ],
   );
 
@@ -181,6 +206,7 @@ export function useWalletSession({
     signerRef.current = null;
     setWallet(null);
     setIdentityPubkey(null);
+    setLightningAddress(null);
     resetMaintenance();
     setLoading(true);
     setSyncing(false);
@@ -192,6 +218,7 @@ export function useWalletSession({
     wallet,
     signerRef,
     identityPubkey,
+    lightningAddress,
     loading,
     connecting,
     connectingId,
