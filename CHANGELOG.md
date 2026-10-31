@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/corisco-wallet/corisco-android-app/compare/v0.3.0...v0.4.0) (2026-10-31)
+
+
+### Features
+
+* **app:** receive tabs and full-screen amount editor with fiat swap ([#31](https://github.com/corisco-wallet/corisco-android-app/issues/31)) ([7a25695](https://github.com/corisco-wallet/corisco-android-app/commit/7a25695dbb6d358f5f1ad3dd6d1441966bcb1b35))
+
 ## [0.3.0](https://github.com/corisco-wallet/corisco-android-app/compare/v0.2.1...v0.3.0) (2026-10-18)
 
 
