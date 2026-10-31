@@ -69,6 +69,7 @@ export function WalletNavigator(props: Props) {
         <ReceiveScreen
           wallet={wallet}
           settings={settings}
+          btcPrice={btcPrice}
           lightningAddress={props.lightningAddress}
           addressFailed={props.lightningAddressFailed}
           onRetryAddress={props.onRetryLightningAddress}
@@ -80,6 +81,7 @@ export function WalletNavigator(props: Props) {
           wallet={wallet}
           signer={signer}
           settings={settings}
+          btcPrice={btcPrice}
           availableSats={availableSats}
           onBack={goHome}
           onPaid={() => {

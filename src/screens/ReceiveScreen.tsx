@@ -76,6 +76,7 @@ function CheckIcon({ color, size = 20 }: { color: string; size?: number }) {
 export function ReceiveScreen({
   wallet,
   settings,
+  btcPrice,
   lightningAddress,
   addressFailed,
   onRetryAddress,
@@ -83,6 +84,7 @@ export function ReceiveScreen({
 }: {
   wallet: SparkWalletType;
   settings: Settings;
+  btcPrice: number | null;
   lightningAddress: string | null;
   addressFailed: boolean;
   onRetryAddress: () => void;
@@ -132,30 +134,22 @@ export function ReceiveScreen({
     }
     setGenerating(true);
     setError(null);
-    // No debounce on the very first (any-amount) generation -- this is
-    // what makes an invoice appear the instant the screen opens, with no
-    // tap required. Only typing an amount afterward debounces.
-    const delay = amountText.trim() === "" && invoice === null ? 0 : 400;
-    const timer = setTimeout(() => {
-      createReceiveInvoice(wallet, amountSats, memoText)
-        .then((encodedInvoice) => {
-          if (cancelled) return;
-          setInvoice(encodedInvoice);
-          setInvoiceAmountSats(amountSats);
-        })
-        .catch((err) => {
-          if (cancelled) return;
-          setError(String(err));
-        })
-        .finally(() => {
-          if (!cancelled) setGenerating(false);
-        });
-    }, delay);
+    createReceiveInvoice(wallet, amountSats, memoText)
+      .then((encodedInvoice) => {
+        if (cancelled) return;
+        setInvoice(encodedInvoice);
+        setInvoiceAmountSats(amountSats);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setGenerating(false);
+      });
     return () => {
       cancelled = true;
-      clearTimeout(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amountText, memoText, btc, wallet, showAddress]);
 
   const copy = async (text: string | null) => {
@@ -238,10 +232,11 @@ export function ReceiveScreen({
       {!showAddress && (
         <View style={styles.inputs}>
           <AmountCard
-            unitLabel={unitLabel}
             amountText={amountText}
             onAmountChange={setAmountText}
-            decimal={btc}
+            settings={settings}
+            btcPrice={btcPrice}
+            emptyStyle="link"
             note={{ value: memoText, onChange: setMemoText, maxLength: MAX_MEMO_LENGTH }}
           />
         </View>
