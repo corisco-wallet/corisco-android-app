@@ -49,6 +49,7 @@ export function SendScreen({
   wallet,
   signer,
   settings,
+  btcPrice,
   availableSats,
   onBack,
   onPaid,
@@ -56,6 +57,7 @@ export function SendScreen({
   wallet: SparkWalletType;
   signer: BleHardwareSigner;
   settings: Settings;
+  btcPrice: number | null;
   availableSats: bigint | null;
   onBack: () => void;
   onPaid: () => void;
@@ -432,11 +434,10 @@ export function SendScreen({
       {(invoiceDecoded || lnurlRequest) && (
         <>
           <AmountCard
-            unitLabel={unitLabel}
             amountText={amountText}
             onAmountChange={setAmountText}
-            decimal={btc}
-            amountPlaceholder="Enter amount"
+            settings={settings}
+            btcPrice={btcPrice}
             amountLocked={invoiceAmountSats !== null && !payUrl}
             action={
               invoiceAmountSats === null && activeInvoice !== ""
