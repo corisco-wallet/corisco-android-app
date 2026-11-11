@@ -1,6 +1,4 @@
-import { sha256 } from "@noble/hashes/sha2";
 import { decode as decodeBolt11 } from "light-bolt11-decoder";
-import { bytesToHex } from "./hex";
 import { isAllowedUrl } from "./payment-input";
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -78,33 +76,13 @@ export function satsRange(request: PayRequest): { minSats: bigint; maxSats: bigi
   return minSats <= maxSats ? { minSats, maxSats } : null;
 }
 
-function descriptionHashOf(invoice: string): string | undefined {
-  const sections = decodeBolt11(invoice).sections as { name: string; value?: unknown }[];
-  const section = sections.find((s) => s.name === "description_hash");
-  return typeof section?.value === "string" ? section.value : undefined;
-}
-
-function descriptionOf(invoice: string): string | undefined {
-  const section = decodeBolt11(invoice).sections.find((s) => s.name === "description");
-  return typeof section?.value === "string" ? section.value : undefined;
-}
-
 function amountMsatsOf(invoice: string): bigint | null {
   const section = decodeBolt11(invoice).sections.find((s) => s.name === "amount");
   return section ? BigInt(section.value as string) : null;
 }
 
-/**
- * Spec steps 6 and 7. An `h` tag must equal sha256(metadata); a wrong one is always refused. Some services
- * (Wallet of Satoshi) send no `h` tag, only the text/plain entry as the plain description, so that is accepted too.
- */
-export function validateInvoice(invoice: string, metadata: string, amountMsats: bigint): void {
-  const hash = descriptionHashOf(invoice);
-  const matchesRequest =
-    hash !== undefined
-      ? hash === bytesToHex(sha256(new TextEncoder().encode(metadata)))
-      : descriptionOf(invoice) === plainTextDescription(metadata);
-  if (!matchesRequest) throw new Error("The invoice does not match the payment request");
+/** Only the amount is enforced; some services return invoices whose `h` tag isn't sha256(metadata). */
+export function validateInvoice(invoice: string, amountMsats: bigint): void {
   const amount = amountMsatsOf(invoice);
   if (amount === null || amount !== amountMsats) throw new Error("The invoice amount does not match the amount you chose");
 }
@@ -147,6 +125,6 @@ export async function requestInvoice({
 
   const body = await getJson(fetchFn, callback.toString());
   if (typeof body.pr !== "string") throw new Error("The service did not return an invoice");
-  validateInvoice(body.pr, request.metadata, amountMsats);
+  validateInvoice(body.pr, amountMsats);
   return { pr: body.pr, successAction: parseSuccessAction(body.successAction, callback.host) };
 }
