@@ -81,10 +81,7 @@ function amountMsatsOf(invoice: string): bigint | null {
   return section ? BigInt(section.value as string) : null;
 }
 
-/**
- * Only the amount is enforced. The description hash is not: Primal and Stacker.news issue invoices whose `h` tag
- * isn't sha256(metadata), and Wallet of Satoshi and other wallets pay them regardless.
- */
+/** Only the amount is enforced; some services return invoices whose `h` tag isn't sha256(metadata). */
 export function validateInvoice(invoice: string, amountMsats: bigint): void {
   const amount = amountMsatsOf(invoice);
   if (amount === null || amount !== amountMsats) throw new Error("The invoice amount does not match the amount you chose");

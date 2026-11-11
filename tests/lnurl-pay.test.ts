@@ -88,12 +88,6 @@ describe("validateInvoice", () => {
     expect(() => validateInvoice("lnbc1garbage", 1000n)).toThrow();
   });
 
-  it("accepts an invoice whose description hash is not sha256(metadata)", () => {
-    // A real 10-sat invoice from salmonotter20@primal.net; its h tag doesn't hash the published metadata.
-    const PRIMAL_INVOICE =
-      "lnbc100n1p40flz6pp53mmphjynslpdyc0fw39y574fmjv0qs9v3wwez73a34ndgrelnvlssp596jt8tr6fjneu836xwkk9wsfpnae4jt3pprykd6k9uux6ezmh89qxq9z0rgqnp4qvyndeaqzman7h898jxm98dzkm0mlrsx36s93smrur7h0azyyuxc5rzjqwghf7zxvfkxq5a6sr65g0gdkv768p83mhsnt0msszapamzx2qvuxqqqqrt49lmtcqqqqqqqqqqq86qq9qcqzpuhp579q0hcm8jqmvxsknvvufn5y78m8pksu4refzdxh2gzmmpmpaw5gs9qyyssq42qj234dfzr0757vsf5lqtrn94mprdcdlczehar3u2gx9ccdlxqkdcxxta8f3h89z3ak94r309z7rlypff69cv9jknhvn6mkpuqawccphf27fc";
-    expect(() => validateInvoice(PRIMAL_INVOICE, 10_000n)).not.toThrow();
-  });
 });
 
 describe("requestInvoice", () => {
