@@ -36,7 +36,7 @@ export default function App() {
   const { wallet, maintenance } = session;
   const btcPrice = useBtcPrice(wallet !== null, settings.currency);
 
-  // Deliberately leaves the scan screen up so its connecting progress shows; `connectAndInit` clears it.
+  // Leaves the scan screen up so a failed connect returns to it; `connectAndInit` clears it on success.
   const { stop: stopPairScan } = pairScan;
   const { connectAndInit } = session;
   const selectCandidate = useCallback(
@@ -47,16 +47,16 @@ export default function App() {
     [stopPairScan, connectAndInit],
   );
 
+  const syncingScreen = <SyncingScreen progress={session.syncProgress} label={session.syncLabel} />;
+
   if (!wallet) {
+    if (session.syncing) return syncingScreen;
     if (pairScan.active) {
       return (
         <>
           <PairScanScreen
             scanning={pairScan.scanning}
             candidates={pairScan.candidates}
-            connecting={session.connecting}
-            connectingId={session.connectingId}
-            connectStatus={session.connectStatus}
             error={initError}
             onSelect={selectCandidate}
             onRescan={() => void pairScan.start()}
@@ -71,9 +71,6 @@ export default function App() {
         <>
           <SignerListScreen
             devices={devices.savedDevices}
-            connecting={session.connecting}
-            connectingId={session.connectingId}
-            connectStatus={session.connectStatus}
             initError={initError}
             onSelect={(device) => void connectAndInit(device.id, device)}
             onForget={(device) => void devices.forgetDevice(device)}
@@ -97,7 +94,7 @@ export default function App() {
   }
 
   if (session.syncing) {
-    return <SyncingScreen progress={session.syncProgress} label={session.syncLabel} />;
+    return syncingScreen;
   }
 
   return (

@@ -1,6 +1,6 @@
-// Full-screen "getting your wallet ready" step between a successful BLE
-// connection and the Home screen -- claiming pending transfers,
-// consolidating leaves, and fetching the balance/transaction list are all
+// Full-screen "getting your wallet ready" step between
+// tapping a wallet and the Home screen -- the BLE connect, wallet start,
+// and fetching the balance/transaction list are all
 // real network + BLE round-trips (see App.tsx's `connectAndInit`), so
 // jumping straight to Home would either show stale/zero numbers for a
 // few seconds or need its own per-widget loading states scattered across

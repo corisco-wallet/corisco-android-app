@@ -38,9 +38,6 @@ export function useWalletSession({
   const [lightningAddressFailed, setLightningAddressFailed] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const [connecting, setConnecting] = useState(false);
-  const [connectingId, setConnectingId] = useState<string | null>(null);
-  const [connectStatus, setConnectStatus] = useState("");
   const signerRef = useRef<BleHardwareSigner | null>(null);
   const connRef = useRef<BleSignerConnection | null>(null);
   const walletRef = useRef<SparkWalletType | null>(null);
@@ -71,7 +68,7 @@ export function useWalletSession({
     if (identityPubkey && signerRef.current) void loadLightningAddress(identityPubkey, signerRef.current);
   }, [identityPubkey, loadLightningAddress]);
 
-  // `syncProgress` advances on real stage completions in `connectAndInit`, hitting 100% when data is in hand.
+  // `syncing` covers the whole connect: `syncProgress` advances on real stage completions, hitting 100% when data is in hand.
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncLabel, setSyncLabel] = useState("");
@@ -79,18 +76,32 @@ export function useWalletSession({
   const maintenance = useWalletMaintenance(wallet, signerRef, showLastXTransactions);
   const { claimPending, refreshBalance, refreshTransfers, reset: resetMaintenance } = maintenance;
 
+  // Claiming can take many BLE round-trips, so it runs after Home is shown; Home displays `claiming` meanwhile.
+  const claimInBackground = useCallback(
+    async (w: SparkWalletType, signer: BleHardwareSigner) => {
+      await claimPending(w, signer);
+      if (walletRef.current !== w) return;
+      await Promise.all([refreshBalance(w), refreshTransfers(w)]).catch((err) =>
+        console.warn("refresh after claim failed:", err),
+      );
+    },
+    [claimPending, refreshBalance, refreshTransfers],
+  );
+
   const connectAndInit = useCallback(
     async (targetDeviceId: string, expected?: SavedDevice) => {
-      setConnecting(true);
-      setConnectingId(targetDeviceId);
       setInitError(null);
+      setSyncing(true);
+      setSyncProgress(0);
+      setSyncLabel("Connecting...");
       const conn = new BleSignerConnection();
       try {
-        const { deviceId, deviceName } = await conn.connect(setConnectStatus, targetDeviceId);
+        const { deviceId, deviceName } = await conn.connect(setSyncLabel, targetDeviceId);
+        setSyncProgress(15);
 
         const signer = new BleHardwareSigner(conn);
         if (expected) {
-          setConnectStatus("Verifying wallet...");
+          setSyncLabel("Verifying wallet...");
           const devicePubkey = bytesToHex(await signer.getIdentityPublicKey());
           if (devicePubkey !== expected.identityPubkey) {
             await conn.disconnect().catch(() => {});
@@ -111,24 +122,22 @@ export function useWalletSession({
           }
         }
 
-        setConnectStatus("Starting wallet...");
+        setSyncProgress(25);
+        setSyncLabel("Starting wallet...");
         const { wallet: w } = await SparkWallet.initialize({
           signer,
           options: {
             network: SPARK_NETWORK,
             signerWithPreExistingKeys: true,
-            // Optimization hands leaves to the SSP, which must not happen without a device tap.
-            optimizationOptions: { auto: false },
           },
         });
         setWallet(w);
         walletRef.current = w;
         signerRef.current = signer;
         connRef.current = conn;
-        // `selectCandidate` leaves the scan screen up during connect; clear it now that a wallet exists.
+        // `selectCandidate` keeps the scan screen to fall back to on failure; clear it now that a wallet exists.
         cancelPairScan();
-        setSyncing(true);
-        setSyncProgress(10);
+        setSyncProgress(45);
         setSyncLabel("Preparing wallet...");
 
         // The SDK's private auto-claim timer can't be marked as not needing spend confirmation,
@@ -141,7 +150,7 @@ export function useWalletSession({
 
         const pubkey = await w.getIdentityPublicKey();
         setIdentityPubkey(pubkey);
-        setSyncProgress(25);
+        setSyncProgress(60);
 
         if (savedDevices.some((d) => d.id === deviceId)) {
           await touchLastConnected(deviceId);
@@ -156,26 +165,19 @@ export function useWalletSession({
           }
         }
 
-        setSyncLabel("Checking for pending payments...");
-        await claimPending(w, signer);
-        setSyncProgress(60);
-
-        setSyncProgress(80);
-
         setSyncLabel("Loading balance and activity...");
         await Promise.all([refreshBalance(w), refreshTransfers(w)]);
         // Brief pause so the user registers "100%" before the swap to Home.
         setSyncProgress(100);
         setSyncLabel("Ready");
         await new Promise((resolve) => setTimeout(resolve, 400));
+        void claimInBackground(w, signer);
         void loadLightningAddress(pubkey, signer);
       } catch (err) {
         setInitError(String(err));
         // No wallet owns this connection, so don't leave the BLE link open.
         if (connRef.current !== conn) await conn.disconnect().catch(() => {});
       } finally {
-        setConnecting(false);
-        setConnectingId(null);
         setLoading(false);
         setSyncing(false);
       }
@@ -190,7 +192,7 @@ export function useWalletSession({
       cancelPairScan,
       refreshBalance,
       refreshTransfers,
-      claimPending,
+      claimInBackground,
       loadLightningAddress,
     ],
   );
@@ -230,9 +232,6 @@ export function useWalletSession({
     lightningAddressFailed,
     retryLightningAddress,
     loading,
-    connecting,
-    connectingId,
-    connectStatus,
     syncing,
     syncProgress,
     syncLabel,
