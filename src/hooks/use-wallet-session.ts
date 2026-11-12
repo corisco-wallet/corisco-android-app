@@ -129,8 +129,6 @@ export function useWalletSession({
           options: {
             network: SPARK_NETWORK,
             signerWithPreExistingKeys: true,
-            // Optimization hands leaves to the SSP, which must not happen without a device tap.
-            optimizationOptions: { auto: false },
           },
         });
         setWallet(w);
