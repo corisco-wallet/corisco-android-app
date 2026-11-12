@@ -9,9 +9,6 @@ import type { ScanResult } from "../ble-transport";
 export function PairScanScreen({
   scanning,
   candidates,
-  connecting,
-  connectingId,
-  connectStatus,
   error,
   onSelect,
   onRescan,
@@ -19,9 +16,6 @@ export function PairScanScreen({
 }: {
   scanning: boolean;
   candidates: ScanResult[];
-  connecting: boolean;
-  connectingId: string | null;
-  connectStatus: string;
   error: string | null;
   onSelect: (candidate: ScanResult) => void;
   onRescan: () => void;
@@ -47,31 +41,22 @@ export function PairScanScreen({
         style={styles.list}
         data={candidates}
         keyExtractor={(c) => c.id}
-        renderItem={({ item }) => {
-          const isConnectingThis = connecting && connectingId === item.id;
-          return (
-            <TouchableOpacity style={styles.row} disabled={connecting} onPress={() => onSelect(item)}>
-              <View style={styles.rowText}>
-                <Text style={styles.rowName}>{item.name}</Text>
-                <Text style={styles.rowId}>{item.id}</Text>
-              </View>
-              {isConnectingThis ? (
-                <ActivityIndicator color={colors.accent} size="small" />
-              ) : (
-                <Text style={styles.rowAction}>Pair</Text>
-              )}
-            </TouchableOpacity>
-          );
-        }}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={styles.row} onPress={() => onSelect(item)}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowName}>{item.name}</Text>
+              <Text style={styles.rowId}>{item.id}</Text>
+            </View>
+            <Text style={styles.rowAction}>Pair</Text>
+          </TouchableOpacity>
+        )}
       />
 
-      {connecting && connectingId && <Text style={styles.statusText}>{connectStatus}</Text>}
-
       <View style={styles.actions}>
-        <TouchableOpacity style={styles.secondaryButton} disabled={connecting} onPress={onCancel}>
+        <TouchableOpacity style={styles.secondaryButton} onPress={onCancel}>
           <Text style={styles.secondaryButtonText}>Cancel</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryButton} disabled={connecting || scanning} onPress={onRescan}>
+        <TouchableOpacity style={styles.secondaryButton} disabled={scanning} onPress={onRescan}>
           <Text style={styles.secondaryButtonText}>{scanning ? "Scanning..." : "Scan again"}</Text>
         </TouchableOpacity>
       </View>

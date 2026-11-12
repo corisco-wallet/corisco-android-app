@@ -15,18 +15,12 @@ function shortPubkey(pubkey: string): string {
 
 export function SignerListScreen({
   devices,
-  connecting,
-  connectingId,
-  connectStatus,
   initError,
   onSelect,
   onForget,
   onPairNew,
 }: {
   devices: SavedDevice[];
-  connecting: boolean;
-  connectingId: string | null;
-  connectStatus: string;
   initError: string | null;
   onSelect: (device: SavedDevice) => void;
   onForget: (device: SavedDevice) => void;
@@ -42,32 +36,27 @@ export function SignerListScreen({
         style={styles.list}
         data={devices}
         keyExtractor={(d) => d.id}
-        renderItem={({ item }) => {
-          const isConnectingThis = connecting && connectingId === item.id;
-          return (
-            <TouchableOpacity
-              style={styles.row}
-              disabled={connecting}
-              onPress={() => onSelect(item)}
-              onLongPress={() =>
-                showAlert("Forget wallet?", `Remove "${item.name}" from this list?`, [
-                  { text: "Cancel", style: "cancel" },
-                  { text: "Forget", style: "destructive", onPress: () => onForget(item) },
-                ])
-              }
-            >
-              <View style={styles.rowText}>
-                <Text style={styles.rowName}>{item.name}</Text>
-                <Text style={styles.rowPubkey}>{shortPubkey(item.identityPubkey)}</Text>
-              </View>
-              {isConnectingThis && <Text style={styles.rowStatus}>{connectStatus}</Text>}
-            </TouchableOpacity>
-          );
-        }}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => onSelect(item)}
+            onLongPress={() =>
+              showAlert("Forget wallet?", `Remove "${item.name}" from this list?`, [
+                { text: "Cancel", style: "cancel" },
+                { text: "Forget", style: "destructive", onPress: () => onForget(item) },
+              ])
+            }
+          >
+            <View style={styles.rowText}>
+              <Text style={styles.rowName}>{item.name}</Text>
+              <Text style={styles.rowPubkey}>{shortPubkey(item.identityPubkey)}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
       />
 
-      <TouchableOpacity style={styles.pairButton} disabled={connecting} onPress={onPairNew}>
-        <Text style={styles.pairButtonText}>{connecting && !connectingId ? connectStatus : "+ Pair new wallet"}</Text>
+      <TouchableOpacity style={styles.pairButton} onPress={onPairNew}>
+        <Text style={styles.pairButtonText}>+ Pair new wallet</Text>
       </TouchableOpacity>
     </View>
   );
@@ -127,11 +116,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "monospace",
     marginTop: 2,
-  },
-  rowStatus: {
-    color: colors.accent,
-    fontSize: 11,
-    marginLeft: spacing.sm,
   },
   pairButton: {
     borderRadius: radii.pill,
