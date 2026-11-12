@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/corisco-wallet/corisco-android-app/compare/v0.4.0...v0.5.0) (2026-11-12)
+
+
+### Features
+
+* **app:** show loading screen as soon as a wallet is selected ([#36](https://github.com/corisco-wallet/corisco-android-app/issues/36)) ([c3f8661](https://github.com/corisco-wallet/corisco-android-app/commit/c3f86611a1f6010f00f37294dd3822fa617fabde))
+
+
+### Bug Fixes
+
+* **app:** pay lnurl invoices whose description hash does not match metadata ([#34](https://github.com/corisco-wallet/corisco-android-app/issues/34)) ([d5f5554](https://github.com/corisco-wallet/corisco-android-app/commit/d5f555484bf2bd9fbcb8b593778178aca893dd12))
+
 ## [0.4.0](https://github.com/corisco-wallet/corisco-android-app/compare/v0.3.0...v0.4.0) (2026-10-31)
 
 
