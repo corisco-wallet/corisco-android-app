@@ -7,7 +7,7 @@
     "@noble/hashes": "^1.8.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@scure/base": "^1.2.6",
-    "eas-cli": "^22.2.0",
+    "eas-cli": "^27.10.0",
     "expo": "~57.0.15",
     "expo-camera": "~57.0.4",
     "expo-clipboard": "~57.0.1",
